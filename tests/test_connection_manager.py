@@ -141,50 +141,50 @@ class TestConnectionManager:
         assert "Test" not in manager.get_connection_names()
         
     @pytest.mark.asyncio
-    async def test_connect_direct(self, temp_config_file):
-        """Test connecting to a direct (non-SSH) connection."""
+    async def test_prepare_connection_direct(self, temp_config_file):
+        """Test preparing a direct (non-SSH) connection."""
         manager = ConnectionManager(temp_config_file)
-        success, url = await manager.connect("Test")
+        success, url = await manager.prepare_connection("Test")
         
         assert success is True
         assert url == "ws://test:8000/ws"
         
     @pytest.mark.asyncio
-    async def test_connect_ssh(self, temp_config_file):
-        """Test connecting to an SSH connection."""
+    async def test_prepare_connection_ssh(self, temp_config_file):
+        """Test preparing an SSH connection."""
         manager = ConnectionManager(temp_config_file)
         
         # Mock the SSHTunnel start method to return True
         with mock.patch.object(SSHTunnel, 'start', return_value=True):
-            success, url = await manager.connect("TestSSH")
+            success, url = await manager.prepare_connection("TestSSH")
             
             assert success is True
             assert url == "ws://localhost:8001/ws"
             assert manager.active_tunnel is not None
             
     @pytest.mark.asyncio
-    async def test_connect_ssh_failure(self, temp_config_file):
-        """Test connecting to an SSH connection when tunnel fails."""
+    async def test_prepare_connection_ssh_failure(self, temp_config_file):
+        """Test preparing an SSH connection when tunnel fails."""
         manager = ConnectionManager(temp_config_file)
         
         # Mock the SSHTunnel start method to return False
         with mock.patch.object(SSHTunnel, 'start', return_value=False):
-            success, url = await manager.connect("TestSSH")
+            success, url = await manager.prepare_connection("TestSSH")
             
             assert success is False
             assert "Failed to establish SSH tunnel" in url
             assert manager.active_tunnel is None
             
-    def test_disconnect(self, temp_config_file):
-        """Test disconnecting (closing SSH tunnel)."""
+    def test_close_tunnels(self, temp_config_file):
+        """Test closing SSH tunnels."""
         manager = ConnectionManager(temp_config_file)
         
         # Set up a mock SSH tunnel
         mock_tunnel = mock.MagicMock()
         manager.active_tunnel = mock_tunnel
         
-        # Call disconnect
-        manager.disconnect()
+        # Call close_tunnels
+        manager.close_tunnels()
         
         # Verify tunnel was stopped
         mock_tunnel.stop.assert_called_once()

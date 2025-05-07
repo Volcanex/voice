@@ -151,7 +151,12 @@ class SSHTunnel:
 
 class ConnectionManager:
     """
-    Manages server connection profiles for the Voice Assistant client.
+    Manages server connection profiles and active connections for the Voice Assistant client.
+    
+    This class handles:
+    1. Storing/loading server connection configurations
+    2. Establishing connections to servers
+    3. Managing SSH tunnels for remote connections
     """
     def __init__(self, config_path: Optional[Path] = None):
         """
@@ -313,9 +318,10 @@ class ConnectionManager:
         """
         return list(self.connections.keys())
     
-    async def connect(self, name: str) -> Tuple[bool, str]:
+    async def prepare_connection(self, name: str) -> Tuple[bool, str]:
         """
-        Connect to a server.
+        Prepare a connection to a server by setting up any necessary tunnels
+        and returning the WebSocket URL to connect to.
         
         Args:
             name: Connection name
@@ -368,9 +374,9 @@ class ConnectionManager:
             logger.info(f"Using direct connection URL: {connection['url']}")
             return True, connection["url"]
     
-    def disconnect(self) -> None:
+    def close_tunnels(self) -> None:
         """
-        Disconnect from server and close any tunnels.
+        Close any active SSH tunnels.
         """
         if self.active_tunnel:
             self.active_tunnel.stop()

@@ -1,5 +1,5 @@
 """
-Unit tests for the ConnectionDialog classes.
+Unit tests for the server dialog classes.
 """
 import asyncio
 import json
@@ -17,7 +17,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from client.connection_manager import ConnectionManager
-from client.connection_dialog import ConnectionDialog, ConnectionConfigDialog
+from client.server_dialog import ServerSelectionDialog, ServerConfigDialog
 
 @pytest.fixture
 def temp_config_file():
@@ -83,8 +83,8 @@ def mock_tk():
                             'listbox': mock_listbox,
                         }
 
-class TestConnectionDialog:
-    """Test the ConnectionDialog class."""
+class TestServerSelectionDialog:
+    """Test the ServerSelectionDialog class."""
     
     @patch('tkinter.Listbox')
     def test_initialization(self, mock_listbox, mock_tk, temp_config_file):
@@ -98,9 +98,9 @@ class TestConnectionDialog:
         # Create mock callback
         on_connect = MagicMock()
         
-        with patch('client.connection_dialog.ConnectionDialog._populate_connection_list'):
+        with patch('client.server_dialog.ServerSelectionDialog._populate_connection_list'):
             # Create dialog
-            dialog = ConnectionDialog(
+            dialog = ServerSelectionDialog(
                 parent=mock_tk['root'],
                 connection_manager=manager,
                 on_connect=on_connect
@@ -125,9 +125,9 @@ class TestConnectionDialog:
         # Create mock callback
         on_connect = MagicMock()
         
-        with patch('client.connection_dialog.ConnectionDialog._on_connection_select'):
+        with patch('client.server_dialog.ServerSelectionDialog._on_connection_select'):
             # Create dialog
-            dialog = ConnectionDialog(
+            dialog = ServerSelectionDialog(
                 parent=mock_tk['root'],
                 connection_manager=manager,
                 on_connect=on_connect
@@ -159,7 +159,7 @@ class TestConnectionDialog:
         on_connect = MagicMock()
         
         # Create dialog
-        dialog = ConnectionDialog(
+        dialog = ServerSelectionDialog(
             parent=mock_tk['root'],
             connection_manager=manager,
             on_connect=on_connect
@@ -196,7 +196,7 @@ class TestConnectionDialog:
         on_connect = MagicMock()
         
         # Create dialog
-        dialog = ConnectionDialog(
+        dialog = ServerSelectionDialog(
             parent=mock_tk['root'],
             connection_manager=manager,
             on_connect=on_connect
@@ -213,7 +213,7 @@ class TestConnectionDialog:
         dialog.dialog.destroy.assert_called_once()
         
     @patch('tkinter.Listbox')
-    @patch('client.connection_dialog.ConnectionConfigDialog')
+    @patch('client.server_dialog.ServerConfigDialog')
     def test_on_edit_button(self, mock_config_dialog, mock_listbox, mock_tk, temp_config_file):
         """Test clicking the edit button."""
         # Set up mocks
@@ -227,7 +227,7 @@ class TestConnectionDialog:
         on_connect = MagicMock()
         
         # Create dialog
-        dialog = ConnectionDialog(
+        dialog = ServerSelectionDialog(
             parent=mock_tk['root'],
             connection_manager=manager,
             on_connect=on_connect
@@ -249,7 +249,7 @@ class TestConnectionDialog:
         )
         
     @patch('tkinter.Listbox')
-    @patch('client.connection_dialog.ConnectionConfigDialog')
+    @patch('client.server_dialog.ServerConfigDialog')
     def test_on_new_button(self, mock_config_dialog, mock_listbox, mock_tk, temp_config_file):
         """Test clicking the new button."""
         # Set up mocks
@@ -263,7 +263,7 @@ class TestConnectionDialog:
         on_connect = MagicMock()
         
         # Create dialog
-        dialog = ConnectionDialog(
+        dialog = ServerSelectionDialog(
             parent=mock_tk['root'],
             connection_manager=manager,
             on_connect=on_connect
@@ -296,7 +296,7 @@ class TestConnectionDialog:
         on_connect = MagicMock()
         
         # Create dialog
-        dialog = ConnectionDialog(
+        dialog = ServerSelectionDialog(
             parent=mock_tk['root'],
             connection_manager=manager,
             on_connect=on_connect
@@ -317,8 +317,8 @@ class TestConnectionDialog:
         dialog._populate_connection_list.assert_called_once()
 
 
-class TestConnectionConfigDialog:
-    """Test the ConnectionConfigDialog class."""
+class TestServerConfigDialog:
+    """Test the ServerConfigDialog class."""
     
     def test_initialization_new(self, mock_tk, temp_config_file):
         """Test dialog initialization for a new connection."""
@@ -328,10 +328,10 @@ class TestConnectionConfigDialog:
         # Create mock callback
         on_save = MagicMock()
         
-        with patch('client.connection_dialog.ConnectionConfigDialog._init_ui'):
-            with patch('client.connection_dialog.ConnectionConfigDialog._toggle_ssh_fields'):
+        with patch('client.server_dialog.ServerConfigDialog._init_ui'):
+            with patch('client.server_dialog.ServerConfigDialog._toggle_ssh_fields'):
                 # Create dialog
-                dialog = ConnectionConfigDialog(
+                dialog = ServerConfigDialog(
                     parent=mock_tk['root'],
                     connection_manager=manager,
                     is_new=True,
@@ -354,11 +354,11 @@ class TestConnectionConfigDialog:
         # Create mock callback
         on_save = MagicMock()
         
-        with patch('client.connection_dialog.ConnectionConfigDialog._init_ui'):
-            with patch('client.connection_dialog.ConnectionConfigDialog._toggle_ssh_fields'):
-                with patch('client.connection_dialog.ConnectionConfigDialog._fill_fields'):
+        with patch('client.server_dialog.ServerConfigDialog._init_ui'):
+            with patch('client.server_dialog.ServerConfigDialog._toggle_ssh_fields'):
+                with patch('client.server_dialog.ServerConfigDialog._fill_fields'):
                     # Create dialog
-                    dialog = ConnectionConfigDialog(
+                    dialog = ServerConfigDialog(
                         parent=mock_tk['root'],
                         connection_manager=manager,
                         is_new=False,
@@ -382,10 +382,10 @@ class TestConnectionConfigDialog:
         # Create mock callback
         on_save = MagicMock()
         
-        with patch('client.connection_dialog.ConnectionConfigDialog._init_ui'):
-            with patch('client.connection_dialog.ConnectionConfigDialog._toggle_ssh_fields'):
+        with patch('client.server_dialog.ServerConfigDialog._init_ui'):
+            with patch('client.server_dialog.ServerConfigDialog._toggle_ssh_fields'):
                 # Create dialog
-                dialog = ConnectionConfigDialog(
+                dialog = ServerConfigDialog(
                     parent=mock_tk['root'],
                     connection_manager=manager,
                     is_new=True,
@@ -423,10 +423,10 @@ class TestConnectionConfigDialog:
         # Create mock callback
         on_save = MagicMock()
         
-        with patch('client.connection_dialog.ConnectionConfigDialog._init_ui'):
-            with patch('client.connection_dialog.ConnectionConfigDialog._toggle_ssh_fields'):
+        with patch('client.server_dialog.ServerConfigDialog._init_ui'):
+            with patch('client.server_dialog.ServerConfigDialog._toggle_ssh_fields'):
                 # Create dialog
-                dialog = ConnectionConfigDialog(
+                dialog = ServerConfigDialog(
                     parent=mock_tk['root'],
                     connection_manager=manager,
                     is_new=True,
@@ -459,10 +459,10 @@ class TestConnectionConfigDialog:
         # Create mock callback
         on_save = MagicMock()
         
-        with patch('client.connection_dialog.ConnectionConfigDialog._init_ui'):
-            with patch('client.connection_dialog.ConnectionConfigDialog._toggle_ssh_fields'):
+        with patch('client.server_dialog.ServerConfigDialog._init_ui'):
+            with patch('client.server_dialog.ServerConfigDialog._toggle_ssh_fields'):
                 # Create dialog
-                dialog = ConnectionConfigDialog(
+                dialog = ServerConfigDialog(
                     parent=mock_tk['root'],
                     connection_manager=manager,
                     is_new=True,

@@ -19,7 +19,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from client.connection_manager import ConnectionManager
-from client.connection_dialog import ConnectionDialog
+from client.server_dialog import ServerSelectionDialog
 from client.main import VoiceAssistantApp
 from client.websocket_client import WebSocketClient
 
@@ -131,13 +131,13 @@ class TestVoiceAssistantApp:
                     
                     # Verify resources were cleaned up
                     app.ws_client.disconnect.assert_called_once()
-                    app.connection_manager.disconnect.assert_called_once()
+                    app.connection_manager.close_tunnels.assert_called_once()
                     app.ui.root.destroy.assert_called_once()
                     
     @pytest.mark.asyncio
     async def test_handle_connect_when_disconnected(self):
         """Test connect button when disconnected."""
-        with patch('client.main.ConnectionDialog', autospec=True) as mock_dialog:
+        with patch('client.main.ServerSelectionDialog', autospec=True) as mock_dialog:
             # Create app
             app = VoiceAssistantApp(server_url="ws://test:8000/ws")
             
@@ -170,7 +170,7 @@ class TestVoiceAssistantApp:
         
         # Verify disconnect was performed
         app.ws_client.disconnect.assert_called_once()
-        app.connection_manager.disconnect.assert_called_once()
+        app.connection_manager.close_tunnels.assert_called_once()
         app.ui.set_connected.assert_called_with(False)
         app.ui.set_connection_label.assert_called_with("Not connected")
         app.ui.add_message.assert_called_with("System", "Disconnected from server")
@@ -186,7 +186,7 @@ class TestVoiceAssistantApp:
         # Set up mocks
         app.ui = MagicMock()
         app.connection_manager = MagicMock()
-        app.connection_manager.connect = AsyncMock(return_value=(True, "ws://new:8000/ws"))
+        app.connection_manager.prepare_connection = AsyncMock(return_value=(True, "ws://new:8000/ws"))
         
         # Mock the WebSocketClient
         with patch('client.main.WebSocketClient', autospec=True) as mock_ws_client:
@@ -197,7 +197,7 @@ class TestVoiceAssistantApp:
             await app.handle_connection_select("Test")
             
             # Verify connection was established
-            app.connection_manager.connect.assert_called_once_with("Test")
+            app.connection_manager.prepare_connection.assert_called_once_with("Test")
             mock_ws_client.assert_called_once_with("ws://new:8000/ws")
             ws_client_instance.connect.assert_called_once()
             app.ui.set_connection_label.assert_called_with("Test")
@@ -213,7 +213,7 @@ class TestVoiceAssistantApp:
         # Set up mocks
         app.ui = MagicMock()
         app.connection_manager = MagicMock()
-        app.connection_manager.connect = AsyncMock(return_value=(False, "Failed to establish SSH tunnel"))
+        app.connection_manager.prepare_connection = AsyncMock(return_value=(False, "Failed to establish SSH tunnel"))
         
         # Call connection select handler
         await app.handle_connection_select("TestSSH")
@@ -232,7 +232,7 @@ class TestVoiceAssistantApp:
         # Set up mocks
         app.ui = MagicMock()
         app.connection_manager = MagicMock()
-        app.connection_manager.connect = AsyncMock(return_value=(True, "ws://new:8000/ws"))
+        app.connection_manager.prepare_connection = AsyncMock(return_value=(True, "ws://new:8000/ws"))
         
         # Mock the WebSocketClient with an error
         with patch('client.main.WebSocketClient', autospec=True) as mock_ws_client:
@@ -246,7 +246,7 @@ class TestVoiceAssistantApp:
             app.ui.add_message.assert_called_with("Error", "Failed to connect: WebSocket connection failed")
             app.ui.set_connecting.assert_called_with(False)
             app.ui.set_connected.assert_called_with(False)
-            app.connection_manager.disconnect.assert_called_once()
+            app.connection_manager.close_tunnels.assert_called_once()
             
     @pytest.mark.asyncio
     async def test_handle_server_connect(self):

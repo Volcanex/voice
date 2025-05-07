@@ -16,17 +16,17 @@ if __package__ is None or __package__ == '':
     import ui
     import websocket_client
     import connection_manager
-    import connection_dialog
+    import server_dialog
     from ui import VoiceAssistantUI
     from websocket_client import WebSocketClient
     from connection_manager import ConnectionManager
-    from connection_dialog import ConnectionDialog
+    from server_dialog import ServerSelectionDialog
 else:
     # Running as a package
     from .ui import VoiceAssistantUI
     from .websocket_client import WebSocketClient
     from .connection_manager import ConnectionManager
-    from .connection_dialog import ConnectionDialog
+    from .server_dialog import ServerSelectionDialog
 
 # Configure logging
 logging.basicConfig(
@@ -135,7 +135,7 @@ class VoiceAssistantApp:
         
         # Close any SSH tunnels
         if self.connection_manager:
-            self.connection_manager.disconnect()
+            self.connection_manager.close_tunnels()
             
         # Close UI
         if self.ui and self.ui.root.winfo_exists():
@@ -152,7 +152,7 @@ class VoiceAssistantApp:
             await self.ws_client.disconnect()
             
             # Close any SSH tunnels
-            self.connection_manager.disconnect()
+            self.connection_manager.close_tunnels()
             
             # Update UI
             self.is_connected = False
@@ -163,7 +163,7 @@ class VoiceAssistantApp:
             return
             
         # Show connection dialog
-        ConnectionDialog(self.ui.root, self.connection_manager, self.handle_connection_select)
+        ServerSelectionDialog(self.ui.root, self.connection_manager, self.handle_connection_select)
     
     async def handle_connection_select(self, connection_name: str):
         """
@@ -181,8 +181,8 @@ class VoiceAssistantApp:
             logger.info(f"Connection details: URL={connection.get('url')}, SSH={connection.get('use_ssh', False)}")
         
         # Get connection URL (establishing SSH tunnel if needed)
-        logger.info("Establishing connection (and SSH tunnel if configured)...")
-        success, result = await self.connection_manager.connect(connection_name)
+        logger.info("Setting up connection (and SSH tunnel if configured)...")
+        success, result = await self.connection_manager.prepare_connection(connection_name)
         
         if not success:
             # Connection failed
@@ -228,7 +228,7 @@ class VoiceAssistantApp:
             
             # Close any SSH tunnels
             logger.info("Cleaning up SSH tunnels due to connection error")
-            self.connection_manager.disconnect()
+            self.connection_manager.close_tunnels()
 
     async def handle_send_text(self, text: str):
         """
