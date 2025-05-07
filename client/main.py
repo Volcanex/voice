@@ -15,12 +15,18 @@ if __package__ is None or __package__ == '':
     # Running as a script
     import ui
     import websocket_client
+    import connection_manager
+    import connection_dialog
     from ui import VoiceAssistantUI
     from websocket_client import WebSocketClient
+    from connection_manager import ConnectionManager
+    from connection_dialog import ConnectionDialog
 else:
     # Running as a package
     from .ui import VoiceAssistantUI
     from .websocket_client import WebSocketClient
+    from .connection_manager import ConnectionManager
+    from .connection_dialog import ConnectionDialog
 
 # Configure logging
 logging.basicConfig(
@@ -43,7 +49,7 @@ class VoiceAssistantApp:
         Initialize the voice assistant client app.
         
         Args:
-            server_url: WebSocket server URL
+            server_url: Default WebSocket server URL
         """
         self.server_url = server_url
         self.ui = None
@@ -51,9 +57,21 @@ class VoiceAssistantApp:
         self.session_id = None
         self.conversation_id = None
         
+        # Initialize connection manager
+        self.connection_manager = ConnectionManager()
+        
+        # Ensure the local connection exists
+        if "Local" not in self.connection_manager.get_connection_names():
+            self.connection_manager.add_connection(
+                name="Local",
+                url=server_url,
+                use_ssh=False
+            )
+        
         # Application state
         self.is_connected = False
         self.is_recording = False
+        self.current_connection = None
         
         logger.info("Voice Assistant client initialized")
 
@@ -114,6 +132,10 @@ class VoiceAssistantApp:
         # Close WebSocket connection
         if self.ws_client:
             await self.ws_client.disconnect()
+        
+        # Close any SSH tunnels
+        if self.connection_manager:
+            self.connection_manager.disconnect()
             
         # Close UI
         if self.ui and self.ui.root.winfo_exists():
@@ -126,22 +148,87 @@ class VoiceAssistantApp:
         Handle connect button click.
         """
         if self.is_connected:
+            # Disconnect from server
             await self.ws_client.disconnect()
+            
+            # Close any SSH tunnels
+            self.connection_manager.disconnect()
+            
+            # Update UI
             self.is_connected = False
+            self.current_connection = None
             self.ui.set_connected(False)
+            self.ui.set_connection_label("Not connected")
             self.ui.add_message("System", "Disconnected from server")
+            return
+            
+        # Show connection dialog
+        ConnectionDialog(self.ui.root, self.connection_manager, self.handle_connection_select)
+    
+    async def handle_connection_select(self, connection_name: str):
+        """
+        Handle connection selection from the dialog.
+        
+        Args:
+            connection_name: Selected connection name
+        """
+        self.ui.set_connecting(True)
+        self.ui.add_message("System", f"Connecting to {connection_name}...")
+        
+        logger.info(f"Starting connection process to {connection_name}")
+        connection = self.connection_manager.get_connection(connection_name)
+        if connection:
+            logger.info(f"Connection details: URL={connection.get('url')}, SSH={connection.get('use_ssh', False)}")
+        
+        # Get connection URL (establishing SSH tunnel if needed)
+        logger.info("Establishing connection (and SSH tunnel if configured)...")
+        success, result = await self.connection_manager.connect(connection_name)
+        
+        if not success:
+            # Connection failed
+            logger.error(f"Connection error: {result}")
+            self.ui.add_message("Error", f"Failed to connect: {result}")
+            self.ui.set_connecting(False)
+            self.ui.set_connected(False)
             return
             
         # Connect to server
         try:
+            # Update server URL
+            logger.info(f"Connection established. Using WebSocket URL: {result}")
+            self.server_url = result
+            
+            # Create new WebSocket client with the updated URL
+            logger.info("Creating new WebSocket client...")
+            self.ws_client = WebSocketClient(self.server_url)
+            
+            # Set up event handlers
+            logger.info("Setting up WebSocket event handlers")
+            self.ws_client.on_message = self.handle_server_message
+            self.ws_client.on_connect = self.handle_server_connect
+            self.ws_client.on_disconnect = self.handle_server_disconnect
+            
+            # Connect to WebSocket server
+            logger.info("Connecting to WebSocket server...")
             await self.ws_client.connect()
-            self.ui.set_connecting(True)
-            self.ui.add_message("System", "Connecting to server...")
+            
+            # Set current connection
+            logger.info(f"Successfully connected to {connection_name}")
+            self.current_connection = connection_name
+            
+            # Update UI
+            self.ui.set_connection_label(connection_name)
+            
         except Exception as e:
-            logger.exception(f"Connection error: {e}")
-            self.ui.add_message("Error", f"Failed to connect: {e}")
+            logger.error(f"Connection error: {str(e)}")
+            logger.debug(f"Connection error details:", exc_info=True)
+            self.ui.add_message("Error", f"Failed to connect: {str(e)}")
             self.ui.set_connecting(False)
             self.ui.set_connected(False)
+            
+            # Close any SSH tunnels
+            logger.info("Cleaning up SSH tunnels due to connection error")
+            self.connection_manager.disconnect()
 
     async def handle_send_text(self, text: str):
         """

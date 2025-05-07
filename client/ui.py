@@ -99,6 +99,14 @@ class VoiceAssistantUI:
         )
         self.status_label.pack(side=tk.RIGHT, padx=5)
         
+        # Connection label
+        self.connection_label = ttk.Label(
+            header_frame,
+            text="Not connected",
+            font=("Arial", 10, "italic")
+        )
+        self.connection_label.pack(side=tk.RIGHT, padx=5)
+        
         # Create conversation frame
         conv_frame = ttk.Frame(self.root, padding="10")
         conv_frame.grid(row=1, column=0, sticky="nsew")
@@ -224,6 +232,15 @@ class VoiceAssistantUI:
             self.connect_button.config(state=tk.DISABLED)
         else:
             self.connect_button.config(state=tk.NORMAL)
+            
+    def set_connection_label(self, name: str):
+        """
+        Update the connection label with the server name.
+        
+        Args:
+            name: Connection name
+        """
+        self.connection_label.config(text=name)
 
     def set_recording(self, is_recording: bool):
         """

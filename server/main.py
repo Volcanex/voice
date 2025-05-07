@@ -91,7 +91,39 @@ async def startup_event():
         app_state["csm_module"]
     )
     
+    # Log server startup
     logger.info("Voice Assistant server started")
+    
+    # Check ports and display connection URLs
+    if __package__ is None or __package__ == '':
+        # Only when running directly, not when imported by uvicorn
+        from server.network_utils import get_connection_urls
+        from server.network_utils import check_port_accessible
+    else:
+        from .network_utils import get_connection_urls
+        from .network_utils import check_port_accessible
+    
+    port = config["port"]
+    path = config["websocket_path"]
+    
+    # Check port accessibility
+    local, local_network, public = check_port_accessible(port)
+    
+    # Log connection URLs with status
+    logger.info("=" * 50)
+    logger.info("VOICE ASSISTANT SERVER CONNECTION INFORMATION")
+    logger.info("=" * 50)
+    
+    # Get and display connection URLs
+    urls = get_connection_urls(port, path)
+    statuses = [local, local_network, public]
+    
+    for i, url in enumerate(urls):
+        status = "OPEN" if i < len(statuses) and statuses[i] else "UNKNOWN"
+        logger.info(f"Connection URL {i+1}: {url} - Status: {status}")
+    
+    logger.info("=" * 50)
+    logger.info("Use one of these URLs to connect with the client")
 
 @app.on_event("shutdown")
 async def shutdown_event():

@@ -64,6 +64,9 @@ run_test "ASR" "tests/test_asr.py" || OVERALL_STATUS=1
 run_test "LLM" "tests/test_llm.py" || OVERALL_STATUS=1
 run_test "CSM" "tests/test_csm.py" || OVERALL_STATUS=1
 run_test "End-to-End" "tests/test_e2e.py" || OVERALL_STATUS=1
+run_test "ConnectionManager" "tests/test_connection_manager.py" || OVERALL_STATUS=1
+run_test "ConnectionDialog" "tests/test_connection_dialog.py" || OVERALL_STATUS=1
+run_test "ClientIntegration" "tests/test_client_integration.py" || OVERALL_STATUS=1
 
 # Display overall test summary
 if [ $OVERALL_STATUS -eq 0 ]; then

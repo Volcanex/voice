@@ -62,20 +62,27 @@ class WebSocketClient:
             return
             
         try:
+            logger.info(f"Connecting to WebSocket server at {self.server_url}...")
+            
+            # Provide more detailed logging
+            connection_start = time.time()
             self.websocket = await websockets.connect(self.server_url)
+            connection_time = time.time() - connection_start
+            
             self.is_connected = True
             
-            logger.info(f"Connected to WebSocket server at {self.server_url}")
+            logger.info(f"Successfully connected to WebSocket server at {self.server_url} in {connection_time:.2f} seconds")
             
             # Start message handling loop
             asyncio.create_task(self._handle_messages())
             
             # Call connect handler
             if self.on_connect:
+                logger.info("Triggering connection handler")
                 await self.on_connect()
                 
         except Exception as e:
-            logger.exception(f"Failed to connect: {e}")
+            logger.error(f"Failed to connect to {self.server_url}: {e}")
             self.is_connected = False
             self.websocket = None
             raise
