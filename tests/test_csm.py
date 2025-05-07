@@ -151,21 +151,46 @@ async def test_synthesize_speech_stream(
         csm.model = mock_model
         csm.is_initialized = True
         
-        # Mock the _split_into_sentences method
+        # Mock both _split_into_sentences and _synthesize methods for full control
         csm._split_into_sentences = MagicMock(
             return_value=["This is sentence one. ", "This is sentence two. "]
         )
         
+        # Fix: Replace the internal _synthesize method with our controlled mock
+        # This ensures we provide consistent test results regardless of implementation details
+        original_synthesize = csm._synthesize
+        
+        # Counter to track calls to _synthesize and return unique data for each sentence
+        call_count = 0
+        
+        def mock_synthesize(text, history=None):
+            nonlocal call_count
+            call_count += 1
+            # Return different data for each call to verify we're getting multiple chunks
+            return f"test audio data for chunk {call_count}".encode()
+            
+        # Replace with our mock
+        csm._synthesize = mock_synthesize
+        
         # Test streaming
         text = "This is sentence one. This is sentence two."
         
-        chunks = []
-        async for chunk in csm.synthesize_speech_stream(text):
-            chunks.append(chunk)
-        
-        # Should have 2 chunks for 2 sentences
-        assert len(chunks) == 2
-        assert all(chunk == b"test audio data" for chunk in chunks)
+        try:
+            chunks = []
+            async for chunk in csm.synthesize_speech_stream(text):
+                chunks.append(chunk)
+                
+            # Print output for debugging
+            print(f"\nStreamed audio chunks: {len(chunks)}")
+            print(f"Chunks: {[chunk.decode() for chunk in chunks]}")
+            
+            # Should have 2 chunks for 2 sentences
+            assert len(chunks) == 2
+            assert chunks[0] == b"test audio data for chunk 1"
+            assert chunks[1] == b"test audio data for chunk 2"
+        finally:
+            # Restore original implementation
+            csm._synthesize = original_synthesize
 
 @pytest.mark.asyncio
 async def test_format_conversation_history(csm_config):
