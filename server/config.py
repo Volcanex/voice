@@ -16,6 +16,9 @@ PORT = int(os.getenv("VOICE_PORT", "8000"))
 WEBSOCKET_PATH = "/ws"
 DEBUG = os.getenv("VOICE_DEBUG", "0") == "1"
 
+# Environment check for low memory mode
+LOW_MEMORY = os.getenv("LOW_MEMORY", "0") == "1"
+
 # Model settings
 ASR_MODEL = {
     "model_id": "openai/whisper-small",
@@ -32,13 +35,15 @@ LLM_MODEL = {
     "max_new_tokens": 512,
     "temperature": 0.7,
     "top_p": 0.9,
+    "low_memory": LOW_MEMORY,  # Enable memory-efficient loading
+    "device_map": "auto" if LOW_MEMORY else None,  # Auto distribute model in low memory mode
 }
 
 CSM_MODEL = {
     "model_id": "sesame/csm-1b",
     "device": "cuda" if os.getenv("USE_CUDA", "1") == "1" else "cpu",
     "cache_dir": str(MODEL_DIR / "csm"),
-    "quality": "high",  # Options: low, medium, high
+    "quality": "low" if LOW_MEMORY else "high",  # Use lower quality in low memory mode
 }
 
 # Audio settings

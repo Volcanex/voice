@@ -43,6 +43,10 @@ class LLMModule:
         self.cache_dir = config["cache_dir"]
         self.quantize = config["quantize"]
         
+        # Memory management options
+        self.low_memory = config.get("low_memory", False)
+        self.device_map = config.get("device_map")
+        
         # Generation parameters
         self.max_new_tokens = config.get("max_new_tokens", 512)
         self.temperature = config.get("temperature", 0.7)
@@ -78,8 +82,35 @@ class LLMModule:
         """
         Load the model and tokenizer.
         """
+        # Add memory usage logging
+        try:
+            import resource
+            import psutil
+            has_monitoring = True
+            process = psutil.Process()
+        except ImportError:
+            has_monitoring = False
+            logger.warning("psutil not installed, memory monitoring disabled")
+        
+        # Log initial memory usage
+        if has_monitoring:
+            mem_before = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info(f"Memory usage before model loading: {mem_before:.2f} MB")
+            
+            # Report system memory
+            virtual_memory = psutil.virtual_memory()
+            logger.info(f"System memory: {virtual_memory.total / 1024 / 1024:.2f} MB total, "
+                        f"{virtual_memory.available / 1024 / 1024:.2f} MB available")
+            
+            # Check if CUDA is available and get GPU memory info
+            if torch.cuda.is_available():
+                for i in range(torch.cuda.device_count()):
+                    gpu_mem = torch.cuda.get_device_properties(i).total_memory / 1024 / 1024  # MB
+                    logger.info(f"GPU {i} total memory: {gpu_mem:.2f} MB")
+        
         try:
             # Load tokenizer
+            logger.info(f"Loading tokenizer from {self.model_id}")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_id, 
                 cache_dir=self.cache_dir,
@@ -95,14 +126,24 @@ class LLMModule:
             # Determine if we can use GPU
             use_gpu = self.device == "cuda" and torch.cuda.is_available()
             
+            # Apply low memory mode settings
+            if self.low_memory:
+                logger.info("Low memory mode is enabled")
+                model_kwargs["low_cpu_mem_usage"] = True
+                
+                # Use device map if provided
+                if self.device_map:
+                    logger.info(f"Using device map: {self.device_map}")
+                    model_kwargs["device_map"] = self.device_map
+            
             # Add quantization options if dependencies are available
             if use_gpu and self.quantize == "gptq":
-                if HAS_BITSANDBYTES:
+                if HAS_BITSANDBYTES and not self.low_memory:
                     logger.info("Using 4-bit quantization with bitsandbytes")
                     model_kwargs["load_in_4bit"] = True
                     model_kwargs["bnb_4bit_compute_dtype"] = torch.float16
                 else:
-                    logger.warning("bitsandbytes not available, falling back to standard loading")
+                    logger.warning("bitsandbytes not available or low memory mode, falling back to standard loading")
             elif self.quantize == "gguf" and HAS_BITSANDBYTES:
                 logger.info("Using 8-bit quantization for CPU")
                 model_kwargs["load_in_8bit"] = True
@@ -116,46 +157,102 @@ class LLMModule:
             else:
                 logger.info("Flash Attention not available, using eager implementation")
                 model_kwargs["attn_implementation"] = "eager"
+                
+            # Set low_cpu_mem_usage to True to reduce memory overhead (always a good idea)
+            model_kwargs["low_cpu_mem_usage"] = True
             
+            # Enable offloading to disk for large models
+            model_kwargs["offload_folder"] = self.cache_dir
+                
             # Load model
             logger.info(f"Loading LLM with options: {model_kwargs}")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_id, 
-                **model_kwargs
-            )
             
-            # Move to device if not already there via quantization
-            if use_gpu:
+            # Log memory usage before model loading
+            if has_monitoring:
+                mem_before_load = process.memory_info().rss / 1024 / 1024  # MB
+                logger.info(f"Memory usage before model loading: {mem_before_load:.2f} MB")
+            
+            # Set a conservative memory limit for loading - if exceeded, retry with more options
+            memory_limited = False
+            try:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id, 
+                    **model_kwargs
+                )
+            except (RuntimeError, OutOfMemoryError) as mem_error:
+                logger.warning(f"Memory error during model loading: {mem_error}")
+                logger.warning("Trying again with device_map='auto' to spread across CPU/GPU")
+                memory_limited = True
+                
+                # Add auto device map for memory-efficient loading
+                model_kwargs["device_map"] = "auto"
+                model_kwargs["max_memory"] = None  # Let the library determine optimal allocation
+                
+                if has_monitoring:
+                    # Force garbage collection
+                    import gc
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                
+                # Try loading with auto device map
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id, 
+                    **model_kwargs
+                )
+            
+            # Log memory usage after model loading
+            if has_monitoring:
+                mem_after_load = process.memory_info().rss / 1024 / 1024  # MB
+                logger.info(f"Memory usage after model loading: {mem_after_load:.2f} MB")
+                if mem_before_load > 0:
+                    logger.info(f"Model loading used approximately {mem_after_load - mem_before_load:.2f} MB")
+            
+            # Move to device if not using device_map='auto' and not memory limited
+            if use_gpu and not memory_limited:
                 if self.quantize != "gptq" or not HAS_BITSANDBYTES:
                     logger.info("Moving model to CUDA")
                     self.model = self.model.to("cuda")
-            else:
+            elif not memory_limited:
                 logger.warning("CUDA not available, using CPU for LLM")
                 self.device = "cpu"
                 
+            logger.info("LLM model loaded successfully")
+                
         except Exception as e:
             logger.error(f"Failed to load LLM model: {e}")
+            
+            # Log memory at time of failure
+            if has_monitoring:
+                mem_at_failure = process.memory_info().rss / 1024 / 1024  # MB
+                logger.error(f"Memory usage at failure: {mem_at_failure:.2f} MB")
+                
+                # Check if it's likely an OOM issue
+                if mem_at_failure > virtual_memory.total * 0.8 / 1024 / 1024:  # If using >80% of RAM
+                    logger.error("Memory usage is very high - likely an out-of-memory condition")
+                
             # Continue with reduced functionality rather than crashing
             if "No package metadata was found for bitsandbytes" in str(e):
                 logger.warning("Attempting to load model without quantization")
                 try:
-                    # Try again without quantization
+                    # Try again without quantization, with minimal memory footprint
+                    logger.info("Retrying with minimal config and device_map='auto'")
                     self.model = AutoModelForCausalLM.from_pretrained(
                         self.model_id,
                         cache_dir=self.cache_dir,
                         trust_remote_code=True,
-                        attn_implementation="eager"  # Always use eager as fallback
+                        attn_implementation="eager",  # Always use eager as fallback
+                        device_map="auto",           # Distribute across devices
+                        low_cpu_mem_usage=True,      # Minimize memory usage
+                        offload_folder=self.cache_dir # Allow offloading
                     )
                     
-                    if self.device == "cuda" and torch.cuda.is_available():
-                        self.model = self.model.to("cuda")
-                    else:
-                        self.device = "cpu"
-                        
                     logger.info("Successfully loaded model without quantization")
                     return
                 except Exception as inner_e:
                     logger.error(f"Failed to load model without quantization: {inner_e}")
+            
+            logger.error("Exhausted all loading options, model initialization failed")
             
             # If we can't load the model at all, raise the exception
             raise

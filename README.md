@@ -122,12 +122,25 @@ For CPU-only operation, no additional setup is required - the system will fall b
 ### Running the Server
 
 ```bash
-# Start the server (using the wrapper script)
+# Standard mode - using the wrapper script
 ./run_server.py
 
 # Alternative method (as a module)
 python -m server.main
+
+# Low memory mode - for systems with limited RAM
+./run_server_low_memory.sh
 ```
+
+### Memory Requirements
+
+The server has different memory modes:
+
+1. **Standard Mode**: Requires ~8GB RAM, GPU recommended
+2. **Low Memory Mode**: Can run on systems with 4GB RAM, CPU-only
+   - Uses model offloading and device_map='auto'
+   - Reduces quality settings for CSM
+   - Disables GPU acceleration
 
 ### Running the Client
 
