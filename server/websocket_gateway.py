@@ -35,7 +35,12 @@ class ServerMessage(BaseModel):
     
     def to_json(self) -> str:
         """Convert message to JSON string."""
-        return self.json()
+        # Use model_dump_json to avoid deprecation warning in Pydantic v2
+        if hasattr(self, 'model_dump_json'):
+            return self.model_dump_json()
+        else:
+            # Fallback for older Pydantic versions
+            return self.json()
 
 class WebSocketManager:
     """
