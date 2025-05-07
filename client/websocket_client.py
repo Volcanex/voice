@@ -7,11 +7,13 @@ import asyncio
 import base64
 import json
 import logging
+import numpy as np
 import time
 from typing import Dict, Any, Optional, Callable, List
 import uuid
 
-import pyaudio
+import sounddevice as sd
+import soundfile as sf
 import websockets
 from websockets.exceptions import ConnectionClosed, ConnectionClosedError
 
@@ -38,17 +40,17 @@ class WebSocketClient:
         self.on_disconnect: Optional[Callable[[], None]] = None
         
         # Audio recording
-        self.audio = None
-        self.audio_stream = None
         self.is_recording = False
         self.recording_task = None
         self.conversation_id = None
+        self.input_stream = None
+        self.output_stream = None
         
         # Audio settings
         self.sample_rate = 16000
         self.channels = 1
         self.chunk_size = 1024
-        self.audio_format = pyaudio.paInt16
+        self.dtype = 'int16'  # Equivalent to pyaudio.paInt16
         
         logger.info("WebSocket client initialized")
 
@@ -214,10 +216,6 @@ class WebSocketClient:
             
         self.conversation_id = conversation_id
         self.is_recording = True
-        
-        # Initialize PyAudio
-        if not self.audio:
-            self.audio = pyaudio.PyAudio()
             
         # Start recording task
         self.recording_task = asyncio.create_task(self._record_audio())
@@ -243,10 +241,10 @@ class WebSocketClient:
             self.recording_task = None
             
         # Stop audio stream
-        if self.audio_stream:
-            self.audio_stream.stop_stream()
-            self.audio_stream.close()
-            self.audio_stream = None
+        if self.input_stream is not None:
+            self.input_stream.stop()
+            self.input_stream.close()
+            self.input_stream = None
             
         # Send end stream message
         await self.send_message("end_stream", {"conversation_id": self.conversation_id})
@@ -255,53 +253,84 @@ class WebSocketClient:
 
     async def _record_audio(self):
         """
-        Record audio and send to server.
+        Record audio and send to server using SoundDevice.
         """
         try:
-            # Create audio stream
-            self.audio_stream = self.audio.open(
-                format=self.audio_format,
+            # Define callback function to process audio data
+            queue = asyncio.Queue()
+            
+            def audio_callback(indata, frames, time, status):
+                """Callback function for the input stream"""
+                if status:
+                    logger.warning(f"Stream status: {status}")
+                # Convert the NumPy array to bytes
+                audio_data = indata.tobytes()
+                # Put the data in the queue
+                asyncio.run_coroutine_threadsafe(queue.put(audio_data), asyncio.get_event_loop())
+            
+            # Open the input stream
+            self.input_stream = sd.InputStream(
+                samplerate=self.sample_rate,
                 channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                frames_per_buffer=self.chunk_size
+                dtype=self.dtype,
+                blocksize=self.chunk_size,
+                callback=audio_callback
             )
             
-            # Start recording
+            # Start the stream
+            self.input_stream.start()
+            
+            # Process audio data from the queue
             while self.is_recording:
-                # Read audio chunk
-                audio_data = self.audio_stream.read(self.chunk_size, exception_on_overflow=False)
-                
-                # Encode as base64
-                audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-                
-                # Send to server
-                payload = {
-                    "audio": audio_b64,
-                    "conversation_id": self.conversation_id,
-                    "is_final": False
-                }
-                
-                await self.send_message("audio", payload)
-                
-                # Short delay to prevent overwhelming the server
-                await asyncio.sleep(0.01)
-                
-            # Send final chunk
-            audio_data = self.audio_stream.read(self.chunk_size, exception_on_overflow=False)
-            audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+                try:
+                    # Get audio data with timeout
+                    audio_data = await asyncio.wait_for(queue.get(), 1.0)
+                    
+                    # Encode as base64
+                    audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+                    
+                    # Send to server
+                    payload = {
+                        "audio": audio_b64,
+                        "conversation_id": self.conversation_id,
+                        "is_final": False
+                    }
+                    
+                    await self.send_message("audio", payload)
+                    
+                except asyncio.TimeoutError:
+                    # Timeout is expected when stopping recording
+                    continue
+                except Exception as e:
+                    logger.exception(f"Error processing audio data: {e}")
+                    break
             
-            payload = {
-                "audio": audio_b64,
-                "conversation_id": self.conversation_id,
-                "is_final": True
-            }
-            
-            await self.send_message("audio", payload)
+            # Get any remaining data in the queue for final chunk
+            try:
+                # Try to get one more chunk if available
+                if not queue.empty():
+                    audio_data = queue.get_nowait()
+                    audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+                    
+                    payload = {
+                        "audio": audio_b64,
+                        "conversation_id": self.conversation_id,
+                        "is_final": True
+                    }
+                    
+                    await self.send_message("audio", payload)
+            except asyncio.QueueEmpty:
+                pass
             
         except Exception as e:
             logger.exception(f"Error during audio recording: {e}")
             self.is_recording = False
+        finally:
+            # Ensure stream is stopped and closed
+            if self.input_stream is not None:
+                self.input_stream.stop()
+                self.input_stream.close()
+                self.input_stream = None
 
     async def play_audio(self, audio_data_b64: str):
         """
@@ -314,24 +343,17 @@ class WebSocketClient:
             # Decode base64
             audio_data = base64.b64decode(audio_data_b64)
             
-            # Initialize PyAudio if needed
-            if not self.audio:
-                self.audio = pyaudio.PyAudio()
-                
-            # Create temporary output stream
-            output_stream = self.audio.open(
-                format=self.audio_format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                output=True
+            # Convert bytes to numpy array
+            audio_array = np.frombuffer(audio_data, dtype=self.dtype)
+            
+            # Play audio using SoundDevice (blocks until audio finishes playing)
+            # Use a separate thread to avoid blocking the asyncio event loop
+            await asyncio.to_thread(
+                sd.play,
+                audio_array,
+                samplerate=self.sample_rate,
+                blocking=True
             )
-            
-            # Play audio
-            output_stream.write(audio_data)
-            
-            # Close stream
-            output_stream.stop_stream()
-            output_stream.close()
             
         except Exception as e:
             logger.exception(f"Error playing audio: {e}")
@@ -340,12 +362,16 @@ class WebSocketClient:
         """
         Close and clean up resources.
         """
-        # Close PyAudio
-        if self.audio:
-            if self.audio_stream:
-                self.audio_stream.stop_stream()
-                self.audio_stream.close()
-                
-            self.audio.terminate()
-            self.audio = None
-            self.audio_stream = None
+        # Stop and close any open streams
+        if self.input_stream is not None:
+            self.input_stream.stop()
+            self.input_stream.close()
+            self.input_stream = None
+            
+        if self.output_stream is not None:
+            self.output_stream.stop()
+            self.output_stream.close()
+            self.output_stream = None
+            
+        # Reset state
+        self.is_recording = False

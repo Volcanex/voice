@@ -27,7 +27,8 @@ soundfile>=0.12.1
 # Client
 # Replaced tkinter-async with asynctkinter
 asynctkinter>=0.0.2
-pyaudio>=0.2.13
+# Replaced pyaudio with sounddevice for improved portability
+sounddevice>=0.4.6
 websocket-client>=1.6.4
 
 # Testing
