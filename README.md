@@ -70,11 +70,13 @@ python -m server.download_models
 
 ### Requirements Note
 
-This project has two special dependencies:
+This project has a few special dependencies:
 
 1. **asynctkinter**: The original project required `tkinter-async>=0.2.0` which is not available on PyPI. We've replaced it with `asynctkinter` which provides similar functionality.
 
-2. **sesame-csm**: This is a private package not available on PyPI. The setup script will clone it from GitHub and set up the module for use in the project.
+2. **sounddevice**: We use `sounddevice` instead of `pyaudio` for audio capture and playback. This eliminates the need for system-level dependencies like portaudio19-dev and makes the project more portable across different platforms.
+
+3. **sesame-csm**: This is a private package not available on PyPI. The setup script will clone it from GitHub and set up the module for use in the project.
 
 ### Python Version Requirement
 
