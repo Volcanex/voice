@@ -20,14 +20,11 @@ mkdir -p ./test_models/llm
 mkdir -p ./test_models/csm
 
 # Check if virtual environment exists, if not create it
-if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}Creating virtual environment...${NC}"
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-    pip install pytest pytest-asyncio pytest-mock
+if [ ! -d ".venv" ]; then
+    echo -e "${YELLOW}Virtual environment not found. Please run setup.sh first.${NC}"
+    exit 1
 else
-    source venv/bin/activate
+    source .venv/bin/activate
 fi
 
 # Run the tests
