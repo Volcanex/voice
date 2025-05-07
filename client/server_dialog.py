@@ -34,10 +34,10 @@ class ServerSelectionDialog:
         
         # Create dialog window
         self.dialog = tk.Toplevel(parent)
-        self.dialog.title("Connect to Server")
-        self.dialog.geometry("500x400")
+        self.dialog.title("Select Server")
+        self.dialog.geometry("550x450")
         self.dialog.resizable(True, True)
-        self.dialog.minsize(400, 300)
+        self.dialog.minsize(450, 350)
         
         # Make it modal
         self.dialog.transient(parent)
@@ -66,34 +66,44 @@ class ServerSelectionDialog:
         self.dialog.grid_rowconfigure(1, weight=1)  # Connection list
         self.dialog.grid_rowconfigure(2, weight=0)  # Buttons
         
-        # Connection list label
-        list_label = ttk.Label(
+        # Header label with instructions
+        header_label = ttk.Label(
             self.dialog, 
-            text="Select a connection:",
-            font=("Arial", 12)
+            text="Select a server to connect to:",
+            font=("Arial", 14, "bold")
         )
-        list_label.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 5))
+        header_label.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 5))
         
         # Connection list frame
         list_frame = ttk.Frame(self.dialog)
         list_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
         list_frame.grid_columnconfigure(0, weight=1)
-        list_frame.grid_rowconfigure(0, weight=1)
+        list_frame.grid_rowconfigure(0, weight=0)  # Description label
+        list_frame.grid_rowconfigure(1, weight=1)  # Listbox
         
-        # Connection listbox with scrollbar
+        # Add description text
+        description_label = ttk.Label(
+            list_frame,
+            text="Available servers:",
+            font=("Arial", 11)
+        )
+        description_label.grid(row=0, column=0, sticky="w", padx=0, pady=(0, 5))
+        
+        # Server listbox with scrollbar
         self.connection_listbox = tk.Listbox(
             list_frame,
             font=("Arial", 11),
             activestyle="dotbox",
-            selectmode=tk.SINGLE
+            selectmode=tk.SINGLE,
+            height=10
         )
-        self.connection_listbox.grid(row=0, column=0, sticky="nsew")
+        self.connection_listbox.grid(row=1, column=0, sticky="nsew")
         list_scrollbar = ttk.Scrollbar(
             list_frame, 
             orient=tk.VERTICAL, 
             command=self.connection_listbox.yview
         )
-        list_scrollbar.grid(row=0, column=1, sticky="ns")
+        list_scrollbar.grid(row=1, column=1, sticky="ns")
         self.connection_listbox.config(yscrollcommand=list_scrollbar.set)
         
         # Selection event
@@ -104,10 +114,15 @@ class ServerSelectionDialog:
         button_frame = ttk.Frame(self.dialog)
         button_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
         
+        # Create a style for the primary action button
+        self.dialog.style = ttk.Style()
+        self.dialog.style.configure("Primary.TButton", font=("Arial", 11, "bold"))
+        
         # Buttons
         self.connect_button = ttk.Button(
             button_frame,
-            text="Connect",
+            text="Connect to Server",
+            style="Primary.TButton",
             command=self._on_connect_button,
             state=tk.DISABLED
         )
@@ -115,7 +130,7 @@ class ServerSelectionDialog:
         
         self.edit_button = ttk.Button(
             button_frame,
-            text="Edit",
+            text="Edit Server",
             command=self._on_edit_button,
             state=tk.DISABLED
         )
@@ -123,14 +138,14 @@ class ServerSelectionDialog:
         
         self.new_button = ttk.Button(
             button_frame,
-            text="New",
+            text="Add New Server",
             command=self._on_new_button
         )
         self.new_button.pack(side=tk.RIGHT, padx=5)
         
         self.delete_button = ttk.Button(
             button_frame,
-            text="Delete",
+            text="Delete Server",
             command=self._on_delete_button,
             state=tk.DISABLED
         )
@@ -257,8 +272,8 @@ class ServerConfigDialog:
         
         # Create dialog window
         self.dialog = tk.Toplevel(parent)
-        self.dialog.title("New Connection" if is_new else "Edit Connection")
-        self.dialog.geometry("500x450")
+        self.dialog.title("Add New Server" if is_new else "Edit Server Settings")
+        self.dialog.geometry("550x500")
         self.dialog.resizable(True, False)
         
         # Make it modal
@@ -286,29 +301,56 @@ class ServerConfigDialog:
         self.dialog.grid_columnconfigure(0, weight=0)  # Labels
         self.dialog.grid_columnconfigure(1, weight=1)  # Inputs
         
+        # Add header label
+        header_label = ttk.Label(
+            self.dialog,
+            text="Server Configuration",
+            font=("Arial", 14, "bold")
+        )
+        header_label.grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(10, 20))
+        
+        # Add description text
+        description_text = "Configure connection details for this server. Fill in the server name and WebSocket URL."
+        if self.is_new:
+            description_text += " For remote servers, you can use SSH tunneling for secure connections."
+            
+        description_label = ttk.Label(
+            self.dialog,
+            text=description_text,
+            wraplength=500
+        )
+        description_label.grid(row=1, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 15))
+        
         # Add form fields
         
-        # Connection name
-        ttk.Label(self.dialog, text="Connection Name:").grid(
-            row=0, column=0, sticky="w", padx=10, pady=10
+        # Server name
+        ttk.Label(self.dialog, text="Server Name:").grid(
+            row=2, column=0, sticky="w", padx=10, pady=10
         )
         self.name_entry = ttk.Entry(self.dialog, width=40)
         self.name_entry.grid(
-            row=0, column=1, sticky="ew", padx=10, pady=10
+            row=2, column=1, sticky="ew", padx=10, pady=10
         )
         
         # Server URL
-        ttk.Label(self.dialog, text="Server URL:").grid(
-            row=1, column=0, sticky="w", padx=10, pady=10
+        ttk.Label(self.dialog, text="WebSocket URL:").grid(
+            row=3, column=0, sticky="w", padx=10, pady=10
         )
         self.url_entry = ttk.Entry(self.dialog, width=40)
         self.url_entry.grid(
-            row=1, column=1, sticky="ew", padx=10, pady=10
+            row=3, column=1, sticky="ew", padx=10, pady=10
         )
+        url_hint = ttk.Label(
+            self.dialog, 
+            text="Format: ws://hostname:port/ws or wss://hostname:port/ws", 
+            font=("Arial", 9, "italic"),
+            foreground="gray"
+        )
+        url_hint.grid(row=4, column=1, sticky="w", padx=10, pady=(0, 10))
         
         # Use SSH tunnel
         ttk.Label(self.dialog, text="Use SSH Tunnel:").grid(
-            row=2, column=0, sticky="w", padx=10, pady=10
+            row=5, column=0, sticky="w", padx=10, pady=10
         )
         self.use_ssh_var = tk.BooleanVar(value=False)
         self.use_ssh_check = ttk.Checkbutton(
@@ -317,13 +359,20 @@ class ServerConfigDialog:
             command=self._toggle_ssh_fields
         )
         self.use_ssh_check.grid(
-            row=2, column=1, sticky="w", padx=10, pady=10
+            row=5, column=1, sticky="w", padx=10, pady=10
         )
+        ssh_hint = ttk.Label(
+            self.dialog, 
+            text="Enable for secure remote connections through SSH", 
+            font=("Arial", 9, "italic"),
+            foreground="gray"
+        )
+        ssh_hint.grid(row=6, column=1, sticky="w", padx=10, pady=(0, 5))
         
         # SSH settings frame
         self.ssh_frame = ttk.LabelFrame(self.dialog, text="SSH Tunnel Settings")
         self.ssh_frame.grid(
-            row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=10
+            row=7, column=0, columnspan=2, sticky="ew", padx=10, pady=10
         )
         
         # Configure ssh_frame grid
@@ -391,13 +440,18 @@ class ServerConfigDialog:
         # Button frame
         button_frame = ttk.Frame(self.dialog)
         button_frame.grid(
-            row=4, column=0, columnspan=2, sticky="ew", padx=10, pady=10
+            row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=15
         )
+        
+        # Create a style for the primary action button
+        self.dialog.style = ttk.Style()
+        self.dialog.style.configure("Primary.TButton", font=("Arial", 11, "bold"))
         
         # Save button
         save_button = ttk.Button(
             button_frame,
-            text="Save",
+            text="Save Server Configuration",
+            style="Primary.TButton",
             command=self._on_save_button
         )
         save_button.pack(side=tk.RIGHT, padx=5)
