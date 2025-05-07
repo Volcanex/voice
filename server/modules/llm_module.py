@@ -5,13 +5,24 @@ This module provides a wrapper around Microsoft's Phi-3-mini model
 for generating text responses in a conversational context.
 """
 import asyncio
+import importlib.util
 import logging
+import sys
 from typing import Dict, Any, List, AsyncGenerator, Optional, Tuple
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import TextIteratorStreamer
 from threading import Thread
+
+# Check for optional dependencies
+def is_package_available(package_name):
+    """Check if a package is available without importing it."""
+    return importlib.util.find_spec(package_name) is not None
+
+# Check for quantization and acceleration libraries
+HAS_BITSANDBYTES = is_package_available("bitsandbytes")
+HAS_FLASH_ATTN = is_package_available("flash_attn")
 
 logger = logging.getLogger(__name__)
 
@@ -81,21 +92,42 @@ class LLMModule:
                 "trust_remote_code": True,
             }
             
-            # Add quantization options if needed
-            if self.quantize == "gptq" and self.device == "cuda":
-                model_kwargs["load_in_4bit"] = True
-                model_kwargs["bnb_4bit_compute_dtype"] = torch.float16
-            elif self.quantize == "gguf" and self.device == "cpu":
+            # Determine if we can use GPU
+            use_gpu = self.device == "cuda" and torch.cuda.is_available()
+            
+            # Add quantization options if dependencies are available
+            if use_gpu and self.quantize == "gptq":
+                if HAS_BITSANDBYTES:
+                    logger.info("Using 4-bit quantization with bitsandbytes")
+                    model_kwargs["load_in_4bit"] = True
+                    model_kwargs["bnb_4bit_compute_dtype"] = torch.float16
+                else:
+                    logger.warning("bitsandbytes not available, falling back to standard loading")
+            elif self.quantize == "gguf" and HAS_BITSANDBYTES:
+                logger.info("Using 8-bit quantization for CPU")
                 model_kwargs["load_in_8bit"] = True
+            else:
+                logger.info("Quantization not available or not requested")
+                
+            # Handle flash attention
+            if use_gpu and HAS_FLASH_ATTN:
+                logger.info("Using Flash Attention for faster inference")
+                model_kwargs["attn_implementation"] = "flash_attention_2"
+            else:
+                logger.info("Flash Attention not available, using eager implementation")
+                model_kwargs["attn_implementation"] = "eager"
             
             # Load model
+            logger.info(f"Loading LLM with options: {model_kwargs}")
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_id, 
                 **model_kwargs
             )
             
-            if self.device == "cuda" and torch.cuda.is_available():
-                if self.quantize != "gptq":  # Only move to GPU if not already quantized
+            # Move to device if not already there via quantization
+            if use_gpu:
+                if self.quantize != "gptq" or not HAS_BITSANDBYTES:
+                    logger.info("Moving model to CUDA")
                     self.model = self.model.to("cuda")
             else:
                 logger.warning("CUDA not available, using CPU for LLM")
@@ -103,6 +135,29 @@ class LLMModule:
                 
         except Exception as e:
             logger.error(f"Failed to load LLM model: {e}")
+            # Continue with reduced functionality rather than crashing
+            if "No package metadata was found for bitsandbytes" in str(e):
+                logger.warning("Attempting to load model without quantization")
+                try:
+                    # Try again without quantization
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_id,
+                        cache_dir=self.cache_dir,
+                        trust_remote_code=True,
+                        attn_implementation="eager"  # Always use eager as fallback
+                    )
+                    
+                    if self.device == "cuda" and torch.cuda.is_available():
+                        self.model = self.model.to("cuda")
+                    else:
+                        self.device = "cpu"
+                        
+                    logger.info("Successfully loaded model without quantization")
+                    return
+                except Exception as inner_e:
+                    logger.error(f"Failed to load model without quantization: {inner_e}")
+            
+            # If we can't load the model at all, raise the exception
             raise
 
     def format_conversation(

@@ -2,11 +2,14 @@
 Tests for the LLM module.
 """
 import asyncio
+import importlib
 import pytest
+import sys
 from unittest.mock import MagicMock, patch
 
 import torch
 
+# Import after adding the mock
 from server.modules.llm_module import LLMModule
 
 @pytest.fixture
@@ -145,3 +148,47 @@ async def test_generate_response_stream(
     # Check that the model was called via thread
     assert mock_thread.called
     assert collected_tokens == ["This ", "is ", "a ", "test ", "response"]
+
+@pytest.mark.asyncio
+@patch("server.modules.llm_module.is_package_available")
+@patch("server.modules.llm_module.AutoTokenizer")
+@patch("server.modules.llm_module.AutoModelForCausalLM")
+async def test_missing_dependencies_fallback(
+    mock_model_class, mock_tokenizer_class, mock_is_package_available, llm_config
+):
+    """Test LLM module gracefully handles missing dependencies."""
+    # Mock that dependencies are missing
+    def is_package_mock(package_name):
+        # Return False for bitsandbytes and flash_attn to simulate missing dependencies
+        if package_name in ["bitsandbytes", "flash_attn"]:
+            return False
+        return True
+    
+    mock_is_package_available.side_effect = is_package_mock
+    
+    # Mock tokenizer and model
+    mock_tokenizer = MagicMock()
+    mock_model = MagicMock()
+    mock_tokenizer_class.from_pretrained.return_value = mock_tokenizer
+    
+    # First attempt raises the bitsandbytes import error, second succeeds
+    mock_model_class.from_pretrained.side_effect = [
+        ImportError("No package metadata was found for bitsandbytes"),
+        mock_model
+    ]
+    
+    # Run the test
+    llm = LLMModule(llm_config)
+    await llm.initialize()
+    
+    # Verify the model was loaded correctly despite missing dependencies
+    assert llm.is_initialized
+    assert llm.model == mock_model
+    
+    # Verify it attempted loading twice - first with quantization, then without
+    assert mock_model_class.from_pretrained.call_count == 2
+    
+    # Check the second call used eager attention
+    second_call_args = mock_model_class.from_pretrained.call_args_list[1][1]
+    assert "attn_implementation" in second_call_args
+    assert second_call_args["attn_implementation"] == "eager"
