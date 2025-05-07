@@ -1,15 +1,21 @@
-# Core dependencies
-fastapi>=0.104.0
-uvicorn>=0.23.2
-websockets>=11.0.3
+# Primary dependencies (minimal requirements)
+numpy>=1.26.0
+scipy>=1.11.3
 pydantic>=2.4.2
 python-dotenv>=1.0.0
 loguru>=0.7.2
 
-# ASR module
+# Core ML dependencies - installed first to ensure proper build environment
 torch>=2.1.0
 torchaudio>=2.1.0
 transformers>=4.34.0
+
+# Server dependencies
+fastapi>=0.104.0
+uvicorn>=0.23.2
+websockets>=11.0.3
+
+# ASR module
 openai-whisper>=20231117
 
 # LLM module
@@ -17,22 +23,14 @@ accelerate>=0.23.0
 optimum>=1.12.0
 sentencepiece>=0.1.99
 safetensors>=0.4.0
-# For LLM quantization and optimization
-bitsandbytes>=0.41.0
-flash-attn>=2.3.0
-# Fall back to CPU if GPU not available or dependencies missing
 
 # CSM module
-numpy>=1.26.0
-scipy>=1.11.3
-# sesame-csm>=0.1.0
+# sesame-csm>=0.1.0  # Will be installed from GitHub
 soundfile>=0.12.1
 
 # Client
-# Replaced tkinter-async with asynctkinter
-asynctkinter>=0.0.2
-# Replaced pyaudio with sounddevice for improved portability
-sounddevice>=0.4.6
+asynctkinter>=0.0.2  # Replacement for tkinter-async
+sounddevice>=0.4.6   # Replacement for pyaudio
 websocket-client>=1.6.4
 
 # Testing
@@ -40,8 +38,11 @@ pytest>=7.4.2
 pytest-asyncio>=0.21.1
 pytest-mock>=3.12.0
 
-# Docker utilities
-# Note: CUDA is installed separately at the system level
-# For local development, use one of these packages if GPU support is needed:
+# Optional dependencies for GPU acceleration and quantization
+# These may require GPU hardware and specific system libraries
+# They will be skipped if installation fails, and the system will 
+# fall back to CPU-only operation
+# Uncomment to install if needed:
+# bitsandbytes>=0.41.0
+# flash-attn>=2.3.0
 # cuda-python>=12.0.0
-# torch already includes CUDA support when installed with appropriate version

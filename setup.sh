@@ -151,9 +151,9 @@ echo -e "${GREEN}Virtual environment created with Python ${VENV_PYTHON_VERSION}$
 echo -e "${YELLOW}Upgrading pip...${NC}"
 pip install --upgrade pip
 
-# Install dependencies
+# Install dependencies using the controlled installation script
 echo -e "${YELLOW}Installing dependencies...${NC}"
-pip install -r requirements.txt
+./install_requirements.sh
 
 # Setup Sesame CSM
 echo -e "${YELLOW}Setting up Sesame CSM...${NC}"

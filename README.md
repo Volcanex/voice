@@ -94,6 +94,15 @@ These are required for:
 - **PortAudio**: Backend for audio input/output (required by sounddevice)
 - **Tkinter**: For the GUI interface
 
+### Installation Notes
+
+This project uses a controlled installation process to handle dependencies properly:
+
+1. Run `./setup.sh` to create the virtual environment and install dependencies.
+2. For manual installation, use `./install_requirements.sh` after activating your virtual environment.
+3. GPU acceleration packages (bitsandbytes, flash-attn) are optional and will be skipped if installation fails.
+4. The system will automatically fall back to CPU operation if GPU libraries are not available.
+
 ### Python Version Requirement
 
 This project is designed to work with Python 3.10. While it may work with Python 3.9 or 3.11, using Python 3.12+ might cause compatibility issues with some dependencies.
