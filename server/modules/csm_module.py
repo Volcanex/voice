@@ -7,6 +7,8 @@ generating natural-sounding speech with appropriate prosody and pauses.
 import asyncio
 import io
 import logging
+import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, AsyncGenerator, Optional, Tuple, BinaryIO
@@ -15,6 +17,21 @@ import numpy as np
 import torch
 import soundfile as sf
 from transformers import AutoProcessor, AutoModel
+
+# Add the CSM module from external repository to the path
+external_csm_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'external', 'csm')
+if os.path.exists(external_csm_path):
+    sys.path.append(external_csm_path)
+    try:
+        import csm as sesame_csm
+        USE_EXTERNAL_CSM = True
+        logging.info(f"Using external Sesame CSM from {external_csm_path}")
+    except ImportError:
+        USE_EXTERNAL_CSM = False
+        logging.warning(f"External Sesame CSM module not found, using AutoModel fallback")
+else:
+    USE_EXTERNAL_CSM = False
+    logging.warning(f"External Sesame CSM directory not found at {external_csm_path}, using AutoModel fallback")
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +93,26 @@ class CSMModule:
         Load the CSM model and processor.
         """
         try:
-            self.processor = AutoProcessor.from_pretrained(
-                self.model_id, cache_dir=self.cache_dir
-            )
-            
-            self.model = AutoModel.from_pretrained(
-                self.model_id, cache_dir=self.cache_dir
-            )
+            if USE_EXTERNAL_CSM:
+                # Use the external Sesame CSM module
+                logger.info("Loading CSM model using external Sesame CSM module")
+                self.processor = sesame_csm.CSMProcessor.from_pretrained(
+                    self.model_id, cache_dir=self.cache_dir
+                )
+                
+                self.model = sesame_csm.CSMModel.from_pretrained(
+                    self.model_id, cache_dir=self.cache_dir
+                )
+            else:
+                # Fallback to AutoModel
+                logger.info("Loading CSM model using AutoModel (fallback)")
+                self.processor = AutoProcessor.from_pretrained(
+                    self.model_id, cache_dir=self.cache_dir
+                )
+                
+                self.model = AutoModel.from_pretrained(
+                    self.model_id, cache_dir=self.cache_dir
+                )
             
             if self.device == "cuda" and torch.cuda.is_available():
                 self.model = self.model.to("cuda")

@@ -21,11 +21,12 @@ safetensors>=0.4.0
 # CSM module
 numpy>=1.26.0
 scipy>=1.11.3
-sesame-csm>=0.1.0
+# sesame-csm>=0.1.0
 soundfile>=0.12.1
 
 # Client
-tkinter-async>=0.2.0
+# Replaced tkinter-async with asynctkinter
+asynctkinter>=0.0.2
 pyaudio>=0.2.13
 websocket-client>=1.6.4
 

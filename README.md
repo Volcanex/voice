@@ -50,16 +50,35 @@ VOICE/
 git clone <repository-url>
 cd VOICE
 
+# Use the setup script (Python 3.10 recommended)
+./setup.sh
+
+# Alternative manual setup:
 # Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
+# Setup Sesame CSM
+./setup_csm.sh
+
 # Download models (this will take some time)
 python -m server.download_models
 ```
+
+### Requirements Note
+
+This project has two special dependencies:
+
+1. **asynctkinter**: The original project required `tkinter-async>=0.2.0` which is not available on PyPI. We've replaced it with `asynctkinter` which provides similar functionality.
+
+2. **sesame-csm**: This is a private package not available on PyPI. The setup script will clone it from GitHub and set up the module for use in the project.
+
+### Python Version Requirement
+
+This project is designed to work with Python 3.10. While it may work with Python 3.9 or 3.11, using Python 3.12+ might cause compatibility issues with some dependencies.
 
 ## Usage
 

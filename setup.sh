@@ -111,6 +111,10 @@ pip install --upgrade pip
 echo -e "${YELLOW}Installing dependencies...${NC}"
 pip install -r requirements.txt
 
+# Setup Sesame CSM
+echo -e "${YELLOW}Setting up Sesame CSM...${NC}"
+./setup_csm.sh
+
 # Install development dependencies
 echo -e "${YELLOW}Installing development dependencies...${NC}"
 pip install pytest pytest-asyncio pytest-mock
