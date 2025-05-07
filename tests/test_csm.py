@@ -146,26 +146,40 @@ async def test_synthesize_speech_stream(
         mock_temp_file.read.return_value = b"test audio data"
         mock_tempfile.return_value.__enter__.return_value = mock_temp_file
         
+        # Create the CSM module with modified settings for testing
         csm = CSMModule(csm_config)
         csm.processor = mock_processor
         csm.model = mock_model
         csm.is_initialized = True
         
-        # Mock both _split_into_sentences and _synthesize methods for full control
-        csm._split_into_sentences = MagicMock(
-            return_value=["This is sentence one. ", "This is sentence two. "]
-        )
+        # Modify the chunk_size to be very small to force multiple chunks in our test
+        # This is crucial - the default value (30 for medium quality) is too large
+        # for our test sentences to split into multiple chunks
+        original_chunk_size = csm.chunk_size
+        csm.chunk_size = 2  # Make it smaller than our test sentences
+        
+        # Track when sentences are processed
+        processed_sentences = []
+        
+        # Mock _split_into_sentences to return test sentences
+        def mock_split_sentences(text):
+            sentences = ["This is sentence one. ", "This is sentence two. "]
+            print(f"\nSplitting text into sentences: {sentences}")
+            return sentences
+            
+        csm._split_into_sentences = mock_split_sentences
         
         # Fix: Replace the internal _synthesize method with our controlled mock
-        # This ensures we provide consistent test results regardless of implementation details
         original_synthesize = csm._synthesize
         
-        # Counter to track calls to _synthesize and return unique data for each sentence
+        # Counter to track calls to _synthesize and return unique data for each chunk
         call_count = 0
         
         def mock_synthesize(text, history=None):
             nonlocal call_count
             call_count += 1
+            processed_sentences.append(text)
+            print(f"Synthesizing chunk {call_count}: '{text}'")
             # Return different data for each call to verify we're getting multiple chunks
             return f"test audio data for chunk {call_count}".encode()
             
@@ -178,19 +192,22 @@ async def test_synthesize_speech_stream(
         try:
             chunks = []
             async for chunk in csm.synthesize_speech_stream(text):
+                print(f"Received chunk: {chunk.decode()}")
                 chunks.append(chunk)
-                
-            # Print output for debugging
-            print(f"\nStreamed audio chunks: {len(chunks)}")
+            
+            print(f"\nProcessed sentences: {processed_sentences}")
+            print(f"Streamed audio chunks: {len(chunks)}")
             print(f"Chunks: {[chunk.decode() for chunk in chunks]}")
             
             # Should have 2 chunks for 2 sentences
-            assert len(chunks) == 2
+            assert len(chunks) == 2, f"Expected 2 chunks but got {len(chunks)}"
             assert chunks[0] == b"test audio data for chunk 1"
             assert chunks[1] == b"test audio data for chunk 2"
+            
         finally:
-            # Restore original implementation
+            # Restore original implementation and settings
             csm._synthesize = original_synthesize
+            csm.chunk_size = original_chunk_size
 
 @pytest.mark.asyncio
 async def test_format_conversation_history(csm_config):
