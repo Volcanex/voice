@@ -10,8 +10,17 @@ import sys
 import tkinter as tk
 from typing import Dict, Any, Optional, Callable
 
-from .ui import VoiceAssistantUI
-from .websocket_client import WebSocketClient
+# Handle both package and direct script execution
+if __package__ is None or __package__ == '':
+    # Running as a script
+    import ui
+    import websocket_client
+    from ui import VoiceAssistantUI
+    from websocket_client import WebSocketClient
+else:
+    # Running as a package
+    from .ui import VoiceAssistantUI
+    from .websocket_client import WebSocketClient
 
 # Configure logging
 logging.basicConfig(

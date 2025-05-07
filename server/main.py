@@ -14,12 +14,28 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import get_config
-from .state_manager import StateManager
-from .modules.asr_module import ASRModule
-from .modules.llm_module import LLMModule
-from .modules.csm_module import CSMModule
-from .websocket_gateway import WebSocketManager
+# Handle both package and direct script execution
+if __package__ is None or __package__ == '':
+    # Running as a script
+    import sys
+    import os
+    # Add parent directory to path
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # Now we can import from server package
+    from server.config import get_config
+    from server.state_manager import StateManager
+    from server.modules.asr_module import ASRModule
+    from server.modules.llm_module import LLMModule
+    from server.modules.csm_module import CSMModule
+    from server.websocket_gateway import WebSocketManager
+else:
+    # Running as a package
+    from .config import get_config
+    from .state_manager import StateManager
+    from .modules.asr_module import ASRModule
+    from .modules.llm_module import LLMModule
+    from .modules.csm_module import CSMModule
+    from .websocket_gateway import WebSocketManager
 
 # Configure logging
 logging.basicConfig(
@@ -141,9 +157,18 @@ def main():
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
     
+    # Run server with the correct app import path
+    # Determine module path based on how it's being run
+    if __package__ is None or __package__ == '':
+        # Running directly
+        app_path = "main:app"
+    else:
+        # Running as a module
+        app_path = "server.main:app"
+        
     # Run server
     uvicorn.run(
-        "server.main:app",
+        app_path,
         host=host,
         port=port,
         reload=config["debug"],

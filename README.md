@@ -97,14 +97,20 @@ For CPU-only operation, no additional setup is required - the system will fall b
 ### Running the Server
 
 ```bash
-# Start the server
+# Start the server (using the wrapper script)
+./run_server.py
+
+# Alternative method (as a module)
 python -m server.main
 ```
 
 ### Running the Client
 
 ```bash
-# Start the client
+# Start the client (using the wrapper script)
+./run_client.py
+
+# Alternative method (as a module)
 python -m client.main
 ```
 
