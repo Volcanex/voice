@@ -36,4 +36,7 @@ pytest-asyncio>=0.21.1
 pytest-mock>=3.12.0
 
 # Docker utilities
-nvidia-cuda-runtime>=11.8
+# Note: CUDA is installed separately at the system level
+# For local development, use one of these packages if GPU support is needed:
+# cuda-python>=12.0.0
+# torch already includes CUDA support when installed with appropriate version

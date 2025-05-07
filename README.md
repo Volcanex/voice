@@ -80,6 +80,16 @@ This project has two special dependencies:
 
 This project is designed to work with Python 3.10. While it may work with Python 3.9 or 3.11, using Python 3.12+ might cause compatibility issues with some dependencies.
 
+### CUDA/GPU Support
+
+To use GPU acceleration:
+
+1. Install the NVIDIA CUDA Toolkit (version 11.8 or higher) on your system
+2. Install PyTorch with CUDA support matching your installed CUDA version
+3. The system will automatically use GPU if available
+
+For CPU-only operation, no additional setup is required - the system will fall back to CPU processing.
+
 ## Usage
 
 ### Running the Server
