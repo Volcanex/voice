@@ -27,7 +27,7 @@ run_test() {
     echo -e "\n${YELLOW}${BOLD}Running $module module tests...${NC}"
     
     # Run the test and capture output and exit code
-    TEST_OUTPUT=$(python -m pytest $test_file -v)
+    TEST_OUTPUT=$(python3 -m pytest $test_file -v)
     TEST_EXIT_CODE=$?
     
     # Extract test summary

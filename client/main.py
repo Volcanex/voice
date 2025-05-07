@@ -138,8 +138,14 @@ class VoiceAssistantApp:
             self.connection_manager.close_tunnels()
             
         # Close UI
-        if self.ui and self.ui.root.winfo_exists():
-            self.ui.root.destroy()
+        if self.ui and hasattr(self.ui, 'root'):
+            # Try to destroy tkinter window if it exists and is a real window
+            try:
+                if hasattr(self.ui.root, 'winfo_exists') and callable(self.ui.root.winfo_exists) and self.ui.root.winfo_exists():
+                    self.ui.root.destroy()
+            except (AttributeError, tk.TclError):
+                # Handle errors in case of mocks or already destroyed windows
+                pass
             
         logger.info("Client shutdown complete")
 
@@ -162,15 +168,24 @@ class VoiceAssistantApp:
             self.ui.add_message("System", "Disconnected from server")
             return
             
-        # Show connection dialog
-        ServerSelectionDialog(self.ui.root, self.connection_manager, self.handle_connection_select)
+        # Show connection dialog with connection_select_wrapper
+        # Use a special approach for tests vs real application
+        # Create a wrapper function to properly handle the async connection callback
+        def connection_select_wrapper(name, callback):
+            result = self.handle_connection_select(name, callback)
+            if asyncio.iscoroutine(result):
+                asyncio.create_task(result)
+                
+        # Create the dialog
+        ServerSelectionDialog(self.ui.root, self.connection_manager, connection_select_wrapper)
     
-    async def handle_connection_select(self, connection_name: str):
+    async def handle_connection_select(self, connection_name: str, status_callback=None):
         """
         Handle connection selection from the dialog.
         
         Args:
             connection_name: Selected connection name
+            status_callback: Optional callback to update connection status in the dialog
         """
         self.ui.set_connecting(True)
         self.ui.add_message("System", f"Connecting to {connection_name}...")
@@ -178,39 +193,103 @@ class VoiceAssistantApp:
         logger.info(f"Starting connection process to {connection_name}")
         connection = self.connection_manager.get_connection(connection_name)
         if connection:
-            logger.info(f"Connection details: URL={connection.get('url')}, SSH={connection.get('use_ssh', False)}")
+            conn_details = {
+                "Name": connection_name,
+                "URL": connection.get('url'),
+                "SSH Enabled": connection.get('use_ssh', False)
+            }
+            
+            # Add SSH details if using SSH
+            if connection.get('use_ssh', False):
+                conn_details.update({
+                    "SSH Host": connection.get('ssh_host'),
+                    "SSH User": connection.get('ssh_user'),
+                    "SSH Port": connection.get('ssh_port'),
+                    "Remote Host": connection.get('remote_host'),
+                    "Remote Port": connection.get('remote_port'),
+                    "Local Port": connection.get('local_port')
+                })
+                
+            # Log connection details as a formatted block
+            details_str = "\n".join([f"  {k}: {v}" for k, v in conn_details.items()])
+            logger.info(f"Connection details:\n{details_str}")
+            
+            # Update status if callback provided
+            if status_callback:
+                if connection.get("use_ssh", False):
+                    status_msg = f"Setting up SSH tunnel to {connection.get('ssh_host')}..."
+                    status_callback(status_msg)
+                    logger.debug(status_msg)
+                else:
+                    status_msg = f"Preparing direct connection to {connection.get('url')}..."
+                    status_callback(status_msg)
+                    logger.debug(status_msg)
         
         # Get connection URL (establishing SSH tunnel if needed)
         logger.info("Setting up connection (and SSH tunnel if configured)...")
+        if status_callback:
+            status_callback("Preparing connection...")
+        
         success, result = await self.connection_manager.prepare_connection(connection_name)
         
         if not success:
             # Connection failed
+            error_msg = f"Failed to connect: {result}"
             logger.error(f"Connection error: {result}")
-            self.ui.add_message("Error", f"Failed to connect: {result}")
+            self.ui.add_message("Error", error_msg)
             self.ui.set_connecting(False)
             self.ui.set_connected(False)
+            
+            # Update status if callback provided
+            if status_callback:
+                status_callback(error_msg, is_complete=True)
             return
             
         # Connect to server
         try:
             # Update server URL
-            logger.info(f"Connection established. Using WebSocket URL: {result}")
+            logger.info(f"Connection prepared. Using WebSocket URL: {result}")
             self.server_url = result
             
+            # Update status if callback provided
+            if status_callback:
+                status_callback(f"Connection prepared successfully. Creating WebSocket client...")
+            
             # Create new WebSocket client with the updated URL
-            logger.info("Creating new WebSocket client...")
+            logger.debug("Creating new WebSocket client instance")
             self.ws_client = WebSocketClient(self.server_url)
             
             # Set up event handlers
-            logger.info("Setting up WebSocket event handlers")
+            logger.debug("Setting up WebSocket event handlers")
             self.ws_client.on_message = self.handle_server_message
             self.ws_client.on_connect = self.handle_server_connect
             self.ws_client.on_disconnect = self.handle_server_disconnect
             
+            # Update status if callback provided
+            if status_callback:
+                status_msg = f"Connecting to WebSocket server at {self.server_url}..."
+                status_callback(status_msg)
+                logger.info(status_msg)
+            
             # Connect to WebSocket server
-            logger.info("Connecting to WebSocket server...")
-            await self.ws_client.connect()
+            logger.info("Establishing WebSocket connection...")
+            if status_callback:
+                status_callback("Establishing WebSocket connection...")
+            
+            try:
+                # Add timeout to handle potential hanging connections
+                await asyncio.wait_for(
+                    self.ws_client.connect(),
+                    timeout=10.0
+                )
+                logger.info("WebSocket connection established successfully")
+            except asyncio.TimeoutError:
+                error_msg = "Connection timed out after 10 seconds"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+            except Exception as e:
+                logger.error(f"Failed to connect: {str(e)}")
+                raise
             
             # Set current connection
             logger.info(f"Successfully connected to {connection_name}")
@@ -219,16 +298,31 @@ class VoiceAssistantApp:
             # Update UI
             self.ui.set_connection_label(connection_name)
             
+            # Update status with success if callback provided
+            if status_callback:
+                success_msg = f"Successfully connected to {connection_name}!"
+                status_callback(success_msg, is_complete=True)
+                logger.info(success_msg)
+            
         except Exception as e:
-            logger.error(f"Connection error: {str(e)}")
-            logger.debug(f"Connection error details:", exc_info=True)
-            self.ui.add_message("Error", f"Failed to connect: {str(e)}")
+            error_msg = f"Failed to connect: {str(e)}"
+            logger.error(error_msg)
+            logger.exception("Connection error details:")
+            self.ui.add_message("Error", error_msg)
             self.ui.set_connecting(False)
             self.ui.set_connected(False)
             
             # Close any SSH tunnels
-            logger.info("Cleaning up SSH tunnels due to connection error")
+            tunnel_msg = "Cleaning up SSH tunnels due to connection error"
+            logger.info(tunnel_msg)
+            if status_callback:
+                status_callback(tunnel_msg)
+                
             self.connection_manager.close_tunnels()
+            
+            # Update status with error if callback provided
+            if status_callback:
+                status_callback(error_msg, is_complete=True)
 
     async def handle_send_text(self, text: str):
         """
@@ -302,6 +396,9 @@ class VoiceAssistantApp:
         self.ui.set_connecting(False)
         self.ui.set_connected(True)
         
+        # Display message in main UI
+        self.ui.add_message("System", f"Connected to server {self.current_connection}")
+        
         # Send init message
         await self.ws_client.send_init()
 
@@ -333,7 +430,11 @@ class VoiceAssistantApp:
             # Handle initialization response
             self.session_id = payload.get("session_id")
             self.conversation_id = payload.get("conversation_id")
-            self.ui.add_message("System", "Connected to server")
+            
+            # Show a more detailed message with session ID
+            if self.session_id:
+                short_id = self.session_id[:8] + "..." if len(self.session_id) > 8 else self.session_id
+                self.ui.add_message("System", f"Voice assistant initialized (Session: {short_id})")
             
         elif message_type == "ready":
             # Handle ready message

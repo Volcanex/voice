@@ -399,18 +399,40 @@ class TestServerConfigDialog:
                 
                 # Test with SSH enabled
                 dialog.use_ssh_var.get.return_value = True
+                
+                # Create mock child widgets with configure methods
+                child_widgets = []
+                for _ in range(2):
+                    mock_child = MagicMock()
+                    mock_child.configure = MagicMock()
+                    child_widgets.append(mock_child)
+                
+                dialog.ssh_frame.winfo_children.return_value = child_widgets
+                
                 dialog._toggle_ssh_fields()
                 
                 # Verify all children were configured
-                for child in dialog.ssh_frame.winfo_children():
+                for child in child_widgets:
                     child.configure.assert_called_with(state="normal")
                     
                 # Test with SSH disabled
                 dialog.use_ssh_var.get.return_value = False
+                
+                # Create mock child widgets with configure methods for disabled state
+                child_widgets = []
+                for _ in range(2):
+                    mock_child = MagicMock()
+                    mock_child.configure = MagicMock()
+                    # Mock the instance check
+                    type(mock_child).__name__ = "Entry"
+                    child_widgets.append(mock_child)
+                
+                dialog.ssh_frame.winfo_children.return_value = child_widgets
+                
                 dialog._toggle_ssh_fields()
                 
                 # Verify all children were configured
-                for child in dialog.ssh_frame.winfo_children():
+                for child in child_widgets:
                     child.configure.assert_called_with(state="disabled")
                     
     @patch('tkinter.messagebox.showerror')

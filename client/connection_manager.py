@@ -15,7 +15,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Default connection config file path
+# Module level default config path for backward compatibility
 DEFAULT_CONFIG_PATH = Path.home() / ".voice_assistant" / "connections.json"
 
 class SSHTunnel:
@@ -72,8 +72,22 @@ class SSHTunnel:
             logger.info(f"Starting SSH tunnel with command: {cmd_str}")
             logger.info(f"This will forward {self.remote_host}:{self.remote_port} to localhost:{self.local_port}")
             
+            # Log SSH tunnel details
+            tunnel_details = {
+                "SSH Host": self.ssh_host,
+                "SSH Port": self.ssh_port,
+                "SSH User": self.ssh_user,
+                "Remote Host": self.remote_host,
+                "Remote Port": self.remote_port,
+                "Local Port": self.local_port,
+                "Command": cmd_str
+            }
+            details_str = "\n".join([f"  {k}: {v}" for k, v in tunnel_details.items()])
+            logger.info(f"SSH Tunnel Details:\n{details_str}")
+            
             # Start the process
             start_time = time.time()
+            logger.debug("Launching SSH process...")
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -89,11 +103,32 @@ class SSHTunnel:
             if self.process.poll() is not None:
                 stderr = self.process.stderr.read()
                 logger.error(f"SSH tunnel failed to start: {stderr}")
+                # Additional error details if available
+                stdout = self.process.stdout.read()
+                if stdout:
+                    logger.debug(f"SSH process stdout: {stdout}")
+                exit_code = self.process.returncode
+                logger.error(f"SSH process exited with code: {exit_code}")
                 self.process = None
                 return False
                 
             tunnel_startup_time = time.time() - start_time
             logger.info(f"SSH tunnel process started in {tunnel_startup_time:.2f} seconds")
+            
+            # Try to check if the port is actually open
+            import socket
+            try:
+                logger.debug(f"Testing local port {self.local_port} to verify tunnel is working...")
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex(('localhost', self.local_port))
+                if result == 0:
+                    logger.info(f"Port test successful: localhost:{self.local_port} is open")
+                else:
+                    logger.warning(f"Port test warning: localhost:{self.local_port} appears to be closed (code: {result})")
+                sock.close()
+            except Exception as port_err:
+                logger.warning(f"Port test error: {str(port_err)}")
             
             self.is_running = True
             
@@ -111,7 +146,7 @@ class SSHTunnel:
             
         except Exception as e:
             logger.error(f"Error starting SSH tunnel: {str(e)}")
-            logger.debug("SSH tunnel error details:", exc_info=True)
+            logger.exception("SSH tunnel setup error details:")
             self.stop()
             return False
     
@@ -158,6 +193,9 @@ class ConnectionManager:
     2. Establishing connections to servers
     3. Managing SSH tunnels for remote connections
     """
+    # Default configuration path as class attribute
+    DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_PATH
+    
     def __init__(self, config_path: Optional[Path] = None):
         """
         Initialize the connection manager.
@@ -165,7 +203,7 @@ class ConnectionManager:
         Args:
             config_path: Path to connection config file (optional)
         """
-        self.config_path = config_path or DEFAULT_CONFIG_PATH
+        self.config_path = config_path or self.DEFAULT_CONFIG_PATH
         self.connections = {}
         self.active_tunnel = None
         
@@ -358,7 +396,9 @@ class ConnectionManager:
             )
             
             logger.info("Attempting to establish SSH tunnel...")
-            if not tunnel.start():
+            # Run tunnel.start() in a separate thread to avoid blocking the event loop
+            start_result = await asyncio.to_thread(tunnel.start)
+            if not start_result:
                 logger.error("Failed to establish SSH tunnel")
                 return False, "Failed to establish SSH tunnel"
                 

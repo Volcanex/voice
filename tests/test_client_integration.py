@@ -123,6 +123,9 @@ class TestVoiceAssistantApp:
                     # Set up mocks
                     app.ws_client = mock_ws_client.return_value
                     app.ui = mock_ui.return_value
+                    # Add root attribute to UI mock
+                    app.ui.root = MagicMock()
+                    app.ui.root.winfo_exists.return_value = True
                     app.connection_manager = mock_cm.return_value
                     app.ws_client.disconnect = AsyncMock()
                     
@@ -148,8 +151,12 @@ class TestVoiceAssistantApp:
             # Call connect handler
             await app.handle_connect()
             
-            # Verify dialog was shown
-            mock_dialog.assert_called_once_with(app.ui.root, app.connection_manager, app.handle_connection_select)
+            # Verify dialog was shown - but don't check the exact function since we use a wrapper now
+            mock_dialog.assert_called_once()
+            # Verify the first two arguments are correct
+            args, _ = mock_dialog.call_args
+            assert args[0] == app.ui.root
+            assert args[1] == app.connection_manager
             
     @pytest.mark.asyncio
     async def test_handle_connect_when_connected(self):
@@ -318,7 +325,7 @@ class TestVoiceAssistantApp:
         # Verify session was initialized
         assert app.session_id == "123"
         assert app.conversation_id == "456"
-        app.ui.add_message.assert_called_with("System", "Connected to server")
+        app.ui.add_message.assert_called_with("System", "Voice assistant initialized (Session: 123)")
         
     @pytest.mark.asyncio
     async def test_handle_server_message_response_token(self):

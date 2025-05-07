@@ -179,7 +179,7 @@ class LLMModule:
                     self.model_id, 
                     **model_kwargs
                 )
-            except (RuntimeError, OutOfMemoryError) as mem_error:
+            except (RuntimeError, MemoryError) as mem_error:
                 logger.warning(f"Memory error during model loading: {mem_error}")
                 logger.warning("Trying again with device_map='auto' to spread across CPU/GPU")
                 memory_limited = True

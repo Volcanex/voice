@@ -65,6 +65,13 @@ def is_port_open(host: str, port: int) -> bool:
         s.settimeout(1)
         result = s.connect_ex((host, port))
         s.close()
+        
+        # Log more details about the result
+        if result == 0:
+            logger.info(f"Port {port} on {host} is open (result: {result})")
+        else:
+            logger.warning(f"Port {port} on {host} appears to be closed (result: {result})")
+            
         return result == 0
     except Exception as e:
         logger.warning(f"Failed to check if port {port} is open: {e}")

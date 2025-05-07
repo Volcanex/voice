@@ -18,14 +18,14 @@ class ServerSelectionDialog:
     Dialog for selecting a server connection from the list of saved connections.
     """
     def __init__(self, parent: tk.Tk, connection_manager: ConnectionManager, 
-                 on_connect: Callable[[str], None]):
+                 on_connect: Callable[[str, Callable[[str, bool], None]], None]):
         """
         Initialize the server selection dialog.
         
         Args:
             parent: Parent window
             connection_manager: Connection manager instance
-            on_connect: Callback for when a connection is selected
+            on_connect: Callback for when a connection is selected, accepts server name and status update callback
         """
         self.parent = parent
         self.connection_manager = connection_manager
@@ -35,7 +35,7 @@ class ServerSelectionDialog:
         # Create dialog window
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Select Server")
-        self.dialog.geometry("550x450")
+        self.dialog.geometry("550x650")
         self.dialog.resizable(True, True)
         self.dialog.minsize(450, 350)
         
@@ -64,7 +64,11 @@ class ServerSelectionDialog:
         self.dialog.grid_columnconfigure(0, weight=1)
         self.dialog.grid_rowconfigure(0, weight=0)  # Connection list label
         self.dialog.grid_rowconfigure(1, weight=1)  # Connection list
-        self.dialog.grid_rowconfigure(2, weight=0)  # Buttons
+        self.dialog.grid_rowconfigure(2, weight=0)  # Status area
+        self.dialog.grid_rowconfigure(3, weight=0)  # Buttons
+        
+        # Connection state
+        self.is_connecting = False
         
         # Header label with instructions
         header_label = ttk.Label(
@@ -110,9 +114,70 @@ class ServerSelectionDialog:
         self.connection_listbox.bind("<<ListboxSelect>>", self._on_connection_select)
         self.connection_listbox.bind("<Double-1>", self._on_connect_button)
         
+        # Status area
+        status_frame = ttk.LabelFrame(self.dialog, text="Connection Status")
+        status_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
+        status_frame.grid_columnconfigure(0, weight=1)
+        
+        # Status message
+        self.status_label = ttk.Label(
+            status_frame,
+            text="Ready to connect",
+            wraplength=500,
+            font=("Arial", 10),
+            justify="left"
+        )
+        self.status_label.grid(row=0, column=0, sticky="w", padx=10, pady=10)
+        
+        # Progress indicator
+        self.progress_bar = ttk.Progressbar(
+            status_frame,
+            mode="indeterminate",
+            length=500
+        )
+        self.progress_bar.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        
+        # Log display area
+        log_frame = ttk.LabelFrame(self.dialog, text="Connection Log")
+        log_frame.grid(row=3, column=0, sticky="nsew", padx=10, pady=10)
+        log_frame.grid_columnconfigure(0, weight=1)
+        log_frame.grid_rowconfigure(0, weight=1)
+        
+        # Update row config to make log area expandable
+        self.dialog.grid_rowconfigure(3, weight=1)  # Log display
+        self.dialog.grid_rowconfigure(4, weight=0)  # Buttons (changed from 3 to 4)
+        
+        # Log text widget with scrollbar
+        self.log_text = tk.Text(
+            log_frame,
+            height=10,
+            width=50,
+            wrap=tk.WORD,
+            font=("Courier", 9),
+            bg="#f5f5f5",
+            state=tk.DISABLED
+        )
+        self.log_text.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        
+        log_scrollbar = ttk.Scrollbar(
+            log_frame,
+            orient=tk.VERTICAL,
+            command=self.log_text.yview
+        )
+        log_scrollbar.grid(row=0, column=1, sticky="ns", pady=5)
+        self.log_text.config(yscrollcommand=log_scrollbar.set)
+        
+        # Add a clear button for logs
+        clear_log_button = ttk.Button(
+            log_frame,
+            text="Clear Log",
+            command=self._clear_log
+        )
+        clear_log_button.grid(row=1, column=0, sticky="e", padx=5, pady=5)
+        
         # Button frame
         button_frame = ttk.Frame(self.dialog)
-        button_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
+        button_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
         
         # Create a style for the primary action button
         self.dialog.style = ttk.Style()
@@ -193,6 +258,88 @@ class ServerSelectionDialog:
             self.edit_button.config(state=tk.DISABLED)
             self.delete_button.config(state=tk.DISABLED)
     
+    def _clear_log(self):
+        """
+        Clear the log display.
+        """
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.delete(1.0, tk.END)
+        self.log_text.config(state=tk.DISABLED)
+    
+    def add_log_message(self, message: str):
+        """
+        Add a message to the log display.
+        
+        Args:
+            message: Log message to add
+        """
+        import datetime
+        
+        # Get current timestamp
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        # Enable editing and add message
+        self.log_text.config(state=tk.NORMAL)
+        
+        # Add with timestamp and newline
+        log_entry = f"[{timestamp}] {message}\n"
+        self.log_text.insert(tk.END, log_entry)
+        
+        # Scroll to end
+        self.log_text.see(tk.END)
+        
+        # Disable editing
+        self.log_text.config(state=tk.DISABLED)
+        
+        # Force UI update
+        self.dialog.update()
+    
+    def update_connection_status(self, message: str, is_complete: bool = False):
+        """
+        Update the connection status display.
+        
+        Args:
+            message: Status message to display
+            is_complete: Whether the connection process is complete
+        """
+        logger.info(f"Connection status: {message}")
+        
+        # Add to log
+        self.add_log_message(message)
+        
+        # Update the status label
+        self.status_label.config(text=message)
+        
+        # Update UI based on connection state
+        if not is_complete:
+            if not self.is_connecting:
+                # Start progress bar animation
+                self.progress_bar.start(10)
+                self.is_connecting = True
+                
+                # Disable connect button and listbox during connection
+                self.connect_button.config(state=tk.DISABLED)
+                self.connection_listbox.config(state=tk.DISABLED)
+        else:
+            # Connection process completed (success or failure)
+            self.progress_bar.stop()
+            
+            if "Failed" in message or "Error" in message:
+                # Connection failed
+                self.is_connecting = False
+                self.connect_button.config(state=tk.NORMAL)
+                self.connection_listbox.config(state=tk.NORMAL)
+                # Add failure message to log with different wording
+                self.add_log_message(f"Connection attempt failed: {message}")
+            else:
+                # Connection succeeded
+                self.add_log_message("Connection successful! Closing dialog...")
+                # Close dialog
+                self.dialog.destroy()
+        
+        # Force UI update
+        self.dialog.update()
+    
     def _on_connect_button(self, event=None):
         """
         Handle connect button click.
@@ -200,9 +347,18 @@ class ServerSelectionDialog:
         Args:
             event: Button click event (optional)
         """
-        if self.selected_connection:
-            self.on_connect(self.selected_connection)
-            self.dialog.destroy()
+        if self.selected_connection and not self.is_connecting:
+            # Add initial log message
+            self.add_log_message(f"Starting connection to {self.selected_connection}...")
+            
+            # Set initial status
+            self.update_connection_status(f"Connecting to {self.selected_connection}...")
+            
+            # Start connection process
+            # Check if on_connect returns a coroutine before creating task
+            result = self.on_connect(self.selected_connection, self.update_connection_status)
+            if asyncio.iscoroutine(result):
+                asyncio.create_task(result)
     
     def _on_edit_button(self):
         """
@@ -273,7 +429,7 @@ class ServerConfigDialog:
         # Create dialog window
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Add New Server" if is_new else "Edit Server Settings")
-        self.dialog.geometry("550x500")
+        self.dialog.geometry("550x650")
         self.dialog.resizable(True, False)
         
         # Make it modal

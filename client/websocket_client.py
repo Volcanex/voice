@@ -66,8 +66,22 @@ class WebSocketClient:
             
             # Provide more detailed logging
             connection_start = time.time()
-            self.websocket = await websockets.connect(self.server_url)
-            connection_time = time.time() - connection_start
+            
+            # Add timeout to the websocket connection
+            try:
+                logger.info("Attempting websocket connection with 5 second timeout...")
+                self.websocket = await asyncio.wait_for(
+                    websockets.connect(self.server_url),
+                    timeout=5.0
+                )
+                connection_time = time.time() - connection_start
+                logger.info(f"WebSocket connection successful after {connection_time:.2f} seconds")
+            except asyncio.TimeoutError:
+                logger.error("WebSocket connection timed out after 5 seconds")
+                raise RuntimeError("WebSocket connection timed out")
+            except Exception as e:
+                logger.error(f"WebSocket connection failed: {str(e)}")
+                raise
             
             self.is_connected = True
             
