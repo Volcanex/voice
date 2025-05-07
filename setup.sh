@@ -15,6 +15,50 @@ echo -e "${YELLOW}===== Setting up Voice Assistant Environment =====${NC}"
 # Ensure working directory is the project root
 cd "$(dirname "$0")"
 
+# Check for system dependencies
+echo -e "${YELLOW}Checking system dependencies...${NC}"
+
+# Check if we're on a Debian/Ubuntu system
+if command -v apt-get &> /dev/null; then
+    # Check for PortAudio
+    if ! dpkg -l | grep -q portaudio19-dev; then
+        echo -e "${YELLOW}PortAudio development headers not found. Installing...${NC}"
+        # Ask for permission
+        read -p "Install portaudio19-dev using sudo? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            sudo apt-get update
+            sudo apt-get install -y portaudio19-dev
+        else
+            echo -e "${RED}PortAudio is required for audio input/output.${NC}"
+            echo -e "${YELLOW}You can install it manually with: sudo apt-get install portaudio19-dev${NC}"
+        fi
+    else
+        echo -e "${GREEN}PortAudio development headers found.${NC}"
+    fi
+    
+    # Check for Tkinter
+    if ! dpkg -l | grep -q python3-tk; then
+        echo -e "${YELLOW}Tkinter not found. Installing...${NC}"
+        # Ask for permission
+        read -p "Install python3-tk using sudo? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            sudo apt-get update
+            sudo apt-get install -y python3-tk
+        else
+            echo -e "${RED}Tkinter is required for the GUI.${NC}"
+            echo -e "${YELLOW}You can install it manually with: sudo apt-get install python3-tk${NC}"
+        fi
+    else
+        echo -e "${GREEN}Tkinter found.${NC}"
+    fi
+else
+    echo -e "${YELLOW}Not a Debian/Ubuntu system. Please ensure these dependencies are installed manually:${NC}"
+    echo -e "- PortAudio development headers"
+    echo -e "- Tkinter for Python"
+fi
+
 # Check if Python 3.10 is available
 if command -v python3.10 &> /dev/null; then
     PYTHON_CMD="python3.10"
