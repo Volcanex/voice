@@ -80,11 +80,14 @@ This project has a few special dependencies:
 
 ### System Dependencies
 
-Before running the application, you may need to install some system-level dependencies:
+Before running the application, you need to install some system-level dependencies:
 
 ```bash
 # For Debian/Ubuntu systems
 sudo apt-get install portaudio19-dev python3-tk
+
+# OR use our included script
+./install_deps.sh
 ```
 
 These are required for:
