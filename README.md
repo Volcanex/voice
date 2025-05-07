@@ -1,0 +1,101 @@
+# Modular CSM-LLM Voice Assistant System
+
+A modular, low-latency voice assistant system that combines Sesame AI's Controllable Speech Model (CSM) with Phi-3-mini for natural language processing.
+
+## Architecture
+
+The system consists of these key components:
+
+- **Speech-to-text module (ASR)**: Using OpenAI's Whisper-small
+- **Language model**: Microsoft's Phi-3-mini-4k-instruct for text generation
+- **CSM**: Sesame AI's CSM-1B for natural speech synthesis
+- **WebSocket server**: For real-time client communication
+- **Python client**: With TKinter UI for user interaction
+
+## Directory Structure
+
+```
+VOICE/
+├── README.md
+├── requirements.txt
+├── server/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── websocket_gateway.py
+│   ├── state_manager.py
+│   └── modules/
+│       ├── __init__.py
+│       ├── asr_module.py
+│       ├── llm_module.py
+│       └── csm_module.py
+├── client/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── ui.py
+│   └── websocket_client.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_asr.py
+│   ├── test_llm.py
+│   ├── test_csm.py
+│   └── test_e2e.py
+└── Dockerfile
+```
+
+## Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd VOICE
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download models (this will take some time)
+python -m server.download_models
+```
+
+## Usage
+
+### Running the Server
+
+```bash
+# Start the server
+python -m server.main
+```
+
+### Running the Client
+
+```bash
+# Start the client
+python -m client.main
+```
+
+## Docker Deployment
+
+```bash
+# Build the Docker image
+docker build -t voice-assistant .
+
+# Run the container
+docker run -p 8000:8000 --gpus all voice-assistant
+```
+
+## Performance Metrics
+
+- End-to-end latency: Under 1 second from end of speech to first audio response
+- Module independence: Each module can run and be tested standalone
+- Container size: Less than 10GB for the complete system
+- Resource usage: Runs on a single GPU with 16GB VRAM
+
+## Model Details
+
+- **ASR**: [OpenAI Whisper-small](https://huggingface.co/openai/whisper-small) (244M parameters)
+- **LLM**: [Microsoft Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/phi-3-mini-4k-instruct) (3.8B parameters)
+- **CSM**: [Sesame AI CSM-1B](https://huggingface.co/sesame/csm-1b)
